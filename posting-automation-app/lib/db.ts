@@ -59,5 +59,3 @@ try {
 }
 
 export default db;
-
-export default db;
