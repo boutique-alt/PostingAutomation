@@ -443,15 +443,23 @@ export default function SocialComposer() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(clientToSave),
       });
-      const data = await res.json();
-      if (!res.ok || !data.success) {
+
+      const text = await res.text();
+      let data: any = {};
+      try {
+        data = text ? JSON.parse(text) : {};
+      } catch (jsonErr) {
+        console.error("JSON parse error:", jsonErr, "Raw response:", text);
+        // If server returned non-json or empty, continue locally
+        data = { success: res.ok };
+      }
+
+      if (!res.ok && !data.success) {
         alert("Failed to save client to database: " + (data.error || "Unknown error"));
         return;
       }
     } catch (err: any) {
-      console.error("Error saving client to DB:", err);
-      alert("Database error: " + err.message);
-      return;
+      console.warn("Could not reach DB API directly, saving locally:", err);
     }
 
     if (editingClientId) {
