@@ -65,6 +65,19 @@ export async function POST(req: Request) {
     if (platforms.includes("facebook") && fbPageId && fbToken) {
       try {
         let fbPostId = "";
+        let scheduleEpoch: number | null = null;
+
+        if (isScheduled && scheduleTime) {
+          const parsed = Math.floor(new Date(scheduleTime).getTime() / 1000);
+          const currentEpoch = Math.floor(Date.now() / 1000);
+          // Facebook requires scheduled time to be between 10 minutes and 75 days in the future
+          if (parsed > currentEpoch + 600) {
+            scheduleEpoch = parsed;
+          } else {
+            console.warn("Scheduled time is less than 10 minutes in future. Scheduling for 11 mins from now.");
+            scheduleEpoch = currentEpoch + 660;
+          }
+        }
 
         if (uploadFiles.length > 0 && postType === "reel") {
           // ==========================================
@@ -79,6 +92,11 @@ export async function POST(req: Request) {
           fbVideoFormData.append("description", caption || "");
           fbVideoFormData.append("title", caption?.slice(0, 50) || "New Reel");
           fbVideoFormData.append("access_token", fbToken);
+
+          if (scheduleEpoch) {
+            fbVideoFormData.append("published", "false");
+            fbVideoFormData.append("scheduled_publish_time", String(scheduleEpoch));
+          }
 
           const fbVideoRes = await fetch(
             `https://graph.facebook.com/v19.0/${fbPageId}/videos`,
@@ -107,6 +125,11 @@ export async function POST(req: Request) {
           fbPhotoFormData.append("caption", caption || "");
           fbPhotoFormData.append("access_token", fbToken);
 
+          if (scheduleEpoch) {
+            fbPhotoFormData.append("published", "false");
+            fbPhotoFormData.append("scheduled_publish_time", String(scheduleEpoch));
+          }
+
           const fbPhotoRes = await fetch(
             `https://graph.facebook.com/v19.0/${fbPageId}/photos`,
             {
@@ -125,15 +148,22 @@ export async function POST(req: Request) {
           // REGULAR TEXT / FEED POST
           // Endpoint: https://graph.facebook.com/v19.0/{page-id}/feed
           // ==========================================
+          const feedPayload: any = {
+            message: caption || "",
+            access_token: fbToken,
+          };
+
+          if (scheduleEpoch) {
+            feedPayload.published = false;
+            feedPayload.scheduled_publish_time = scheduleEpoch;
+          }
+
           const fbFeedRes = await fetch(
             `https://graph.facebook.com/v19.0/${fbPageId}/feed`,
             {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                message: caption || "",
-                access_token: fbToken,
-              }),
+              body: JSON.stringify(feedPayload),
             }
           );
           const feedData = await fbFeedRes.json();
