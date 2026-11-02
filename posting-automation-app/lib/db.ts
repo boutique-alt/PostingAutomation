@@ -12,6 +12,11 @@ const db = new Database(dbPath);
 
 // Initialize tables
 db.exec(`
+  CREATE TABLE IF NOT EXISTS meta_settings (
+    key TEXT PRIMARY KEY,
+    value TEXT
+  );
+
   CREATE TABLE IF NOT EXISTS clients (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
@@ -42,11 +47,12 @@ db.exec(`
   );
 `);
 
-// Insert default Ronit lifestyle client if empty
-const countClients = db.prepare("SELECT COUNT(*) as count FROM clients").get() as { count: number };
-if (countClients.count === 0) {
+// Insert default Ronit lifestyle client only once on initial setup
+const isInitialized = db.prepare("SELECT value FROM meta_settings WHERE key = 'initialized'").get() as { value?: string } | undefined;
+
+if (!isInitialized) {
   const insertClient = db.prepare(`
-    INSERT INTO clients (id, name, connectMode, fbPageName, fbPageId, fbAccessToken, fbConnected)
+    INSERT OR IGNORE INTO clients (id, name, connectMode, fbPageName, fbPageId, fbAccessToken, fbConnected)
     VALUES (?, ?, ?, ?, ?, ?, ?)
   `);
   insertClient.run(
@@ -58,6 +64,8 @@ if (countClients.count === 0) {
     "EAA7rTrq82k4BSyHOauZABNsPwiD0PJ8kvabvrOMRZB7ZBmdKcrNa1zOmcjEpU5wMx01VFcOk0IziQqjmo4gVZCgkNAav1QR8MDETeonqpsJOgfZBZBAqBZC3vLgcecL7hppZBbvz5PhjOZAZAPxjGRCZCdPRRiiSv0C5q6ScZCs2vhEKnuNjOJO5lR4g6BZCETr9QConZCxmYZD",
     1
   );
+
+  db.prepare("INSERT INTO meta_settings (key, value) VALUES ('initialized', 'true')").run();
 }
 
 export default db;

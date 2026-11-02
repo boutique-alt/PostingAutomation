@@ -93,38 +93,10 @@ export interface MediaFileItem {
 }
 
 export default function SocialComposer() {
-  const [projects, setProjects] = useState<Project[]>([
-    {
-      id: "proj_ronit",
-      name: "Ronit lifestyle",
-      connectMode: "facebook",
-      facebook: {
-        pageName: "Ronit lifestyle",
-        pageId: "274954512375449",
-        accessToken: "EAA7rTrq82k4BSyHOauZABNsPwiD0PJ8kvabvrOMRZB7ZBmdKcrNa1zOmcjEpU5wMx01VFcOk0IziQqjmo4gVZCgkNAav1QR8MDETeonqpsJOgfZBZBAqBZC3vLgcecL7hppZBbvz5PhjOZAZAPxjGRCZCdPRRiiSv0C5q6ScZCs2vhEKnuNjOJO5lR4g6BZCETr9QConZCxmYZD",
-        connected: true,
-      },
-    },
-    {
-      id: "proj_1",
-      name: "Cognitiq AI Project",
-      connectMode: "both",
-      facebook: {
-        pageName: "Cognitiq AI Official",
-        pageId: "1002342342",
-        accessToken: "EAABmocktoken123",
-        connected: true,
-      },
-      instagram: {
-        username: "cognitiq_ai",
-        accountId: "1784140023",
-        accessToken: "EAABmocktoken123",
-        connected: true,
-      },
-    },
-  ]);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [isLoaded, setIsLoaded] = useState<boolean>(false);
 
-  const [activeProjectId, setActiveProjectId] = useState<string>("proj_ronit");
+  const [activeProjectId, setActiveProjectId] = useState<string>("");
   const activeProject = projects.find((p) => p.id === activeProjectId) || projects[0] || null;
 
   const [targetPlatforms, setTargetPlatforms] = useState<{
@@ -194,16 +166,22 @@ export default function SocialComposer() {
     fetch("/api/clients")
       .then((r) => r.json())
       .then((d) => {
-        if (d.success && d.clients && d.clients.length > 0) {
+        setIsLoaded(true);
+        if (d.success && d.clients) {
           setProjects(d.clients);
-          setActiveProjectId(d.clients[0].id);
-          setTargetPlatforms({
-            facebook: !!d.clients[0].facebook,
-            instagram: !!d.clients[0].instagram,
-          });
+          if (d.clients.length > 0) {
+            setActiveProjectId(d.clients[0].id);
+            setTargetPlatforms({
+              facebook: !!d.clients[0].facebook,
+              instagram: !!d.clients[0].instagram,
+            });
+          }
         }
       })
-      .catch((err) => console.error("Error loading clients from DB:", err));
+      .catch((err) => {
+        console.error("Error loading clients from DB:", err);
+        setIsLoaded(true);
+      });
 
     // 2. Fetch history from SQLite DB
     fetch("/api/history")
@@ -671,11 +649,17 @@ export default function SocialComposer() {
               }}
               className="bg-transparent text-xs font-bold text-slate-900 focus:outline-none cursor-pointer w-full truncate"
             >
-              {projects.map((proj) => (
-                <option key={proj.id} value={proj.id} className="bg-white text-slate-900">
-                  {proj.name} ({proj.connectMode.toUpperCase()})
+              {projects.length === 0 ? (
+                <option value="" className="bg-white text-slate-500">
+                  No Clients Connected
                 </option>
-              ))}
+              ) : (
+                projects.map((proj) => (
+                  <option key={proj.id} value={proj.id} className="bg-white text-slate-900">
+                    {proj.name} ({proj.connectMode.toUpperCase()})
+                  </option>
+                ))
+              )}
             </select>
           </div>
 
