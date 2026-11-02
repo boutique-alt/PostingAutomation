@@ -401,7 +401,7 @@ export default function SocialComposer() {
     }, 900);
   };
 
-  const handleSaveClient = () => {
+  const handleSaveClient = async () => {
     if (!clientForm.name.trim()) {
       alert("Please enter a Client / Brand Name.");
       return;
@@ -436,12 +436,23 @@ export default function SocialComposer() {
       instagram: igData,
     };
 
-    // Save to SQLite DB
-    fetch("/api/clients", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(clientToSave),
-    }).catch((err) => console.error("Error saving client to DB:", err));
+    try {
+      // Save directly to SQLite DB and await response
+      const res = await fetch("/api/clients", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(clientToSave),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        alert("Failed to save client to database: " + (data.error || "Unknown error"));
+        return;
+      }
+    } catch (err: any) {
+      console.error("Error saving client to DB:", err);
+      alert("Database error: " + err.message);
+      return;
+    }
 
     if (editingClientId) {
       setProjects((prev) =>
