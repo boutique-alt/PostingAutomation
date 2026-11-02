@@ -162,26 +162,30 @@ export default function SocialComposer() {
 
   // Database loading & persistence
   useEffect(() => {
-    // 1. Fetch clients from SQLite DB
-    fetch("/api/clients")
-      .then((r) => r.json())
-      .then((d) => {
-        setIsLoaded(true);
-        if (d.success && d.clients) {
-          setProjects(d.clients);
-          if (d.clients.length > 0) {
-            setActiveProjectId(d.clients[0].id);
+    const loadClients = () => {
+      fetch("/api/clients")
+        .then((r) => r.json())
+        .then((d) => {
+          setIsLoaded(true);
+          if (d.success && d.clients && d.clients.length > 0) {
+            setProjects(d.clients);
+            setActiveProjectId((prev) => {
+              const stillExists = d.clients.some((c: Project) => c.id === prev);
+              return stillExists && prev ? prev : d.clients[0].id;
+            });
             setTargetPlatforms({
               facebook: !!d.clients[0].facebook,
               instagram: !!d.clients[0].instagram,
             });
           }
-        }
-      })
-      .catch((err) => {
-        console.error("Error loading clients from DB:", err);
-        setIsLoaded(true);
-      });
+        })
+        .catch((err) => {
+          console.error("Error loading clients from DB:", err);
+          setIsLoaded(true);
+        });
+    };
+
+    loadClients();
 
     // 2. Fetch history from SQLite DB
     fetch("/api/history")
@@ -652,7 +656,11 @@ export default function SocialComposer() {
               }}
               className="bg-transparent text-xs font-bold text-slate-900 focus:outline-none cursor-pointer w-full truncate"
             >
-              {projects.length === 0 ? (
+              {!isLoaded ? (
+                <option value="" className="bg-white text-slate-500">
+                  Loading clients...
+                </option>
+              ) : projects.length === 0 ? (
                 <option value="" className="bg-white text-slate-500">
                   No Clients Connected
                 </option>
