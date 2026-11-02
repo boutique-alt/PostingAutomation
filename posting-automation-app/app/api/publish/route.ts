@@ -11,6 +11,7 @@ export async function POST(req: Request) {
     let firstComment: string | null = null;
     let isScheduled = false;
     let scheduleTime: string | null = null;
+    let clientScheduleEpoch: number | null = null;
     let clientCredentials: any = {};
     let uploadFiles: File[] = [];
 
@@ -24,6 +25,8 @@ export async function POST(req: Request) {
       firstComment = (formData.get("firstComment") as string) || null;
       isScheduled = formData.get("isScheduled") === "true";
       scheduleTime = (formData.get("scheduleTime") as string) || null;
+      const rawEpoch = formData.get("scheduleEpoch") as string;
+      if (rawEpoch) clientScheduleEpoch = parseInt(rawEpoch, 10);
       clientCredentials = JSON.parse((formData.get("clientCredentials") as string) || "{}");
 
       const files = formData.getAll("files") as File[];
@@ -67,15 +70,20 @@ export async function POST(req: Request) {
         let fbPostId = "";
         let scheduleEpoch: number | null = null;
 
-        if (isScheduled && scheduleTime) {
-          const parsed = Math.floor(new Date(scheduleTime).getTime() / 1000);
+        if (isScheduled) {
           const currentEpoch = Math.floor(Date.now() / 1000);
-          // Facebook requires scheduled time to be between 10 minutes and 75 days in the future
-          if (parsed > currentEpoch + 600) {
-            scheduleEpoch = parsed;
-          } else {
-            console.warn("Scheduled time is less than 10 minutes in future. Scheduling for 11 mins from now.");
-            scheduleEpoch = currentEpoch + 660;
+          const targetEpoch = clientScheduleEpoch || (scheduleTime ? Math.floor(new Date(scheduleTime).getTime() / 1000) : null);
+          
+          if (targetEpoch) {
+            // Facebook strictly requires scheduled_publish_time to be between 10 minutes (600s) and 75 days in future
+            if (targetEpoch >= currentEpoch + 600) {
+              scheduleEpoch = targetEpoch;
+            } else {
+              // If user selected less than 10 minutes, Meta API will reject with error #100.
+              // So we automatically set it to 10.5 minutes from current time
+              console.log("Selected time is within 10 minutes. Adjusting to 10.5 minutes for Facebook acceptance.");
+              scheduleEpoch = currentEpoch + 630;
+            }
           }
         }
 

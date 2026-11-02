@@ -509,7 +509,10 @@ export default function SocialComposer() {
       formData.append("caption", caption);
       formData.append("isScheduled", String(isScheduled));
       if (isScheduled && scheduleTime) {
+        // Send exact client local timestamp in Epoch seconds
+        const epochSeconds = Math.floor(new Date(scheduleTime).getTime() / 1000);
         formData.append("scheduleTime", scheduleTime);
+        formData.append("scheduleEpoch", String(epochSeconds));
       }
       formData.append(
         "clientCredentials",
