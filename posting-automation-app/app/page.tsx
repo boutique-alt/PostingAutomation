@@ -160,25 +160,42 @@ export default function SocialComposer() {
     igPasswordOrToken: "",
   });
 
-  // Database loading & persistence
+  // Database & Local persistence
   useEffect(() => {
+    // 1. First, instantly load from localStorage (instant display on Vercel/mobile)
+    try {
+      const cached = localStorage.getItem("social_clients_cache");
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setProjects(parsed);
+          setActiveProjectId(parsed[0].id);
+          setTargetPlatforms({
+            facebook: !!parsed[0].facebook,
+            instagram: !!parsed[0].instagram,
+          });
+        }
+      }
+    } catch {}
+
     const loadClients = () => {
       fetch("/api/clients", { cache: "no-store" })
         .then((r) => r.json())
         .then((d) => {
           setIsLoaded(true);
-          if (d.success && Array.isArray(d.clients)) {
+          if (d.success && Array.isArray(d.clients) && d.clients.length > 0) {
             setProjects(d.clients);
-            if (d.clients.length > 0) {
-              setActiveProjectId((prev) => {
-                const stillExists = d.clients.some((c: Project) => c.id === prev);
-                return stillExists && prev ? prev : d.clients[0].id;
-              });
-              setTargetPlatforms({
-                facebook: !!d.clients[0].facebook,
-                instagram: !!d.clients[0].instagram,
-              });
-            }
+            try {
+              localStorage.setItem("social_clients_cache", JSON.stringify(d.clients));
+            } catch {}
+            setActiveProjectId((prev) => {
+              const stillExists = d.clients.some((c: Project) => c.id === prev);
+              return stillExists && prev ? prev : d.clients[0].id;
+            });
+            setTargetPlatforms({
+              facebook: !!d.clients[0].facebook,
+              instagram: !!d.clients[0].instagram,
+            });
           }
         })
         .catch((err) => {
@@ -364,6 +381,10 @@ export default function SocialComposer() {
 
       const updated = projects.filter((p) => p.id !== clientId);
       setProjects(updated);
+      try {
+        localStorage.setItem("social_clients_cache", JSON.stringify(updated));
+      } catch {}
+
       if (activeProjectId === clientId && updated.length > 0) {
         setActiveProjectId(updated[0].id);
       }
@@ -437,40 +458,30 @@ export default function SocialComposer() {
     };
 
     try {
-      // Save directly to SQLite DB and await response
-      const res = await fetch("/api/clients", {
+      // Save to API (SQLite DB on local or /tmp on Vercel)
+      await fetch("/api/clients", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(clientToSave),
       });
-
-      const text = await res.text();
-      let data: any = {};
-      try {
-        data = text ? JSON.parse(text) : {};
-      } catch (jsonErr) {
-        console.error("JSON parse error:", jsonErr, "Raw response:", text);
-        // If server returned non-json or empty, continue locally
-        data = { success: res.ok };
-      }
-
-      if (!res.ok && !data.success) {
-        alert("Failed to save client to database: " + (data.error || "Unknown error"));
-        return;
-      }
     } catch (err: any) {
-      console.warn("Could not reach DB API directly, saving locally:", err);
+      console.warn("Could not reach DB API directly, continuing locally:", err);
     }
 
+    let updatedList: Project[] = [];
     if (editingClientId) {
-      setProjects((prev) =>
-        prev.map((p) => (p.id === editingClientId ? clientToSave : p))
-      );
+      updatedList = projects.map((p) => (p.id === editingClientId ? clientToSave : p));
+      setProjects(updatedList);
       setEditingClientId(null);
     } else {
-      setProjects((prev) => [...prev, clientToSave]);
+      updatedList = [...projects, clientToSave];
+      setProjects(updatedList);
       setActiveProjectId(clientToSave.id);
     }
+
+    try {
+      localStorage.setItem("social_clients_cache", JSON.stringify(updatedList));
+    } catch {}
 
     setTargetPlatforms({
       facebook: !!fbData,
