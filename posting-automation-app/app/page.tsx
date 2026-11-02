@@ -1017,16 +1017,35 @@ export default function SocialComposer() {
             </div>
 
             {isScheduled && (
-              <div className="pt-1 flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3">
-                <input
-                  type="datetime-local"
-                  value={scheduleTime}
-                  onChange={(e) => setScheduleTime(e.target.value)}
-                  className="w-full sm:w-auto bg-white border border-slate-300 text-xs text-slate-800 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500"
-                />
-                <span className="text-[11px] text-slate-500 flex items-center gap-1">
-                  <Clock className="h-3.5 w-3.5" /> Will auto-publish at scheduled time
-                </span>
+              <div className="pt-1 space-y-2.5">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3">
+                  <input
+                    type="datetime-local"
+                    value={scheduleTime}
+                    min={(() => {
+                      const d = new Date(Date.now() + 12 * 60000);
+                      const year = d.getFullYear();
+                      const month = String(d.getMonth() + 1).padStart(2, "0");
+                      const day = String(d.getDate()).padStart(2, "0");
+                      const hours = String(d.getHours()).padStart(2, "0");
+                      const mins = String(d.getMinutes()).padStart(2, "0");
+                      return `${year}-${month}-${day}T${hours}:${mins}`;
+                    })()}
+                    onChange={(e) => setScheduleTime(e.target.value)}
+                    className="w-full sm:w-auto bg-white border border-slate-300 text-xs text-slate-800 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500 font-medium"
+                  />
+                  <span className="text-[11px] text-slate-500 flex items-center gap-1 font-medium">
+                    <Clock className="h-3.5 w-3.5 text-blue-600" /> Auto-publishes at scheduled time
+                  </span>
+                </div>
+
+                {/* Helpful Meta Guideline Note */}
+                <div className="p-2.5 bg-blue-50/70 border border-blue-200 rounded-lg text-[11px] text-blue-900 flex items-start gap-2">
+                  <Info className="h-4 w-4 text-blue-600 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-bold">Facebook Requirement:</span> Schedule time must be <strong>at least 10 minutes in the future</strong> (e.g. at least 15–20 mins later) and up to 75 days in advance.
+                  </div>
+                </div>
               </div>
             )}
 
