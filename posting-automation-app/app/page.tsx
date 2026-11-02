@@ -93,10 +93,22 @@ export interface MediaFileItem {
 }
 
 export default function SocialComposer() {
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [isLoaded, setIsLoaded] = useState<boolean>(false);
+  const [projects, setProjects] = useState<Project[]>([
+    {
+      id: "proj_ronit",
+      name: "Ronit lifestyle",
+      connectMode: "facebook",
+      facebook: {
+        pageName: "Ronit lifestyle",
+        pageId: "274954512375449",
+        accessToken: "EAA7rTrq82k4BSyHOauZABNsPwiD0PJ8kvabvrOMRZB7ZBmdKcrNa1zOmcjEpU5wMx01VFcOk0IziQqjmo4gVZCgkNAav1QR8MDETeonqpsJOgfZBZBAqBZC3vLgcecL7hppZBbvz5PhjOZAZAPxjGRCZCdPRRiiSv0C5q6ScZCs2vhEKnuNjOJO5lR4g6BZCETr9QConZCxmYZD",
+        connected: true,
+      },
+    },
+  ]);
+  const [isLoaded, setIsLoaded] = useState<boolean>(true);
 
-  const [activeProjectId, setActiveProjectId] = useState<string>("");
+  const [activeProjectId, setActiveProjectId] = useState<string>("proj_ronit");
   const activeProject = projects.find((p) => p.id === activeProjectId) || projects[0] || null;
 
   const [targetPlatforms, setTargetPlatforms] = useState<{

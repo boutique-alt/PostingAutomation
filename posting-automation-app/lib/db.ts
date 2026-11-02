@@ -54,6 +54,24 @@ try {
       createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
     );
   `);
+
+  // Auto-seed default Ronit lifestyle if empty so it's always ready immediately
+  const countRow = db.prepare("SELECT COUNT(*) as cnt FROM clients").get() as { cnt: number };
+  if (!countRow || countRow.cnt === 0) {
+    const insertClient = db.prepare(`
+      INSERT OR IGNORE INTO clients (id, name, connectMode, fbPageName, fbPageId, fbAccessToken, fbConnected)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `);
+    insertClient.run(
+      "proj_ronit",
+      "Ronit lifestyle",
+      "facebook",
+      "Ronit lifestyle",
+      "274954512375449",
+      "EAA7rTrq82k4BSyHOauZABNsPwiD0PJ8kvabvrOMRZB7ZBmdKcrNa1zOmcjEpU5wMx01VFcOk0IziQqjmo4gVZCgkNAav1QR8MDETeonqpsJOgfZBZBAqBZC3vLgcecL7hppZBbvz5PhjOZAZAPxjGRCZCdPRRiiSv0C5q6ScZCs2vhEKnuNjOJO5lR4g6BZCETr9QConZCxmYZD",
+      1
+    );
+  }
 } catch (e) {
   console.warn("SQLite initialization note (e.g. read-only serverless environment):", e);
 }
