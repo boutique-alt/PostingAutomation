@@ -163,20 +163,22 @@ export default function SocialComposer() {
   // Database loading & persistence
   useEffect(() => {
     const loadClients = () => {
-      fetch("/api/clients")
+      fetch("/api/clients", { cache: "no-store" })
         .then((r) => r.json())
         .then((d) => {
           setIsLoaded(true);
-          if (d.success && d.clients && d.clients.length > 0) {
+          if (d.success && Array.isArray(d.clients)) {
             setProjects(d.clients);
-            setActiveProjectId((prev) => {
-              const stillExists = d.clients.some((c: Project) => c.id === prev);
-              return stillExists && prev ? prev : d.clients[0].id;
-            });
-            setTargetPlatforms({
-              facebook: !!d.clients[0].facebook,
-              instagram: !!d.clients[0].instagram,
-            });
+            if (d.clients.length > 0) {
+              setActiveProjectId((prev) => {
+                const stillExists = d.clients.some((c: Project) => c.id === prev);
+                return stillExists && prev ? prev : d.clients[0].id;
+              });
+              setTargetPlatforms({
+                facebook: !!d.clients[0].facebook,
+                instagram: !!d.clients[0].instagram,
+              });
+            }
           }
         })
         .catch((err) => {
@@ -188,7 +190,7 @@ export default function SocialComposer() {
     loadClients();
 
     // 2. Fetch history from SQLite DB
-    fetch("/api/history")
+    fetch("/api/history", { cache: "no-store" })
       .then((r) => r.json())
       .then((d) => {
         if (d.success && d.history) {
