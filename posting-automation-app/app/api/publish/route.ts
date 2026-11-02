@@ -123,33 +123,95 @@ export async function POST(req: Request) {
           fbPostId = videoData.id;
           console.log("Facebook Video/Reel Uploaded successfully. ID:", fbPostId);
 
-        } else if (uploadFiles.length > 0 && postType === "poster") {
-          // ==========================================
-          // DIRECT IMAGE UPLOAD TO FACEBOOK
-          // Endpoint: https://graph.facebook.com/v19.0/{page-id}/photos
-          // ==========================================
-          const fbPhotoFormData = new FormData();
-          fbPhotoFormData.append("source", uploadFiles[0]);
-          fbPhotoFormData.append("caption", caption || "");
-          fbPhotoFormData.append("access_token", fbToken);
+        } else if (uploadFiles.length > 0 && (postType === "poster" || postType === "carousel")) {
+          if (uploadFiles.length === 1 || postType === "poster") {
+            // ==========================================
+            // SINGLE DIRECT IMAGE UPLOAD TO FACEBOOK
+            // Endpoint: https://graph.facebook.com/v19.0/{page-id}/photos
+            // ==========================================
+            const fbPhotoFormData = new FormData();
+            fbPhotoFormData.append("source", uploadFiles[0]);
+            fbPhotoFormData.append("caption", caption || "");
+            fbPhotoFormData.append("access_token", fbToken);
 
-          if (scheduleEpoch) {
-            fbPhotoFormData.append("published", "false");
-            fbPhotoFormData.append("scheduled_publish_time", String(scheduleEpoch));
-          }
-
-          const fbPhotoRes = await fetch(
-            `https://graph.facebook.com/v19.0/${fbPageId}/photos`,
-            {
-              method: "POST",
-              body: fbPhotoFormData,
+            if (scheduleEpoch) {
+              fbPhotoFormData.append("published", "false");
+              fbPhotoFormData.append("scheduled_publish_time", String(scheduleEpoch));
             }
-          );
-          const photoData = await fbPhotoRes.json();
-          if (photoData.error) {
-            throw new Error(photoData.error.message || "Facebook Photo Publish Failed");
+
+            const fbPhotoRes = await fetch(
+              `https://graph.facebook.com/v19.0/${fbPageId}/photos`,
+              {
+                method: "POST",
+                body: fbPhotoFormData,
+              }
+            );
+            const photoData = await fbPhotoRes.json();
+            if (photoData.error) {
+              throw new Error(photoData.error.message || "Facebook Photo Publish Failed");
+            }
+            fbPostId = photoData.post_id || photoData.id;
+
+          } else {
+            // ==========================================
+            // MULTI-PHOTO CAROUSEL / ALBUM POST TO FACEBOOK
+            // Step 1: Upload each photo with published=false to obtain photo IDs
+            // Step 2: Publish single feed post attaching all attached_media
+            // ==========================================
+            console.log(`Publishing Carousel with ${uploadFiles.length} photos...`);
+            const photoIds: string[] = [];
+
+            for (const file of uploadFiles) {
+              const photoForm = new FormData();
+              photoForm.append("source", file);
+              photoForm.append("published", "false");
+              photoForm.append("access_token", fbToken);
+
+              const photoRes = await fetch(
+                `https://graph.facebook.com/v19.0/${fbPageId}/photos`,
+                {
+                  method: "POST",
+                  body: photoForm,
+                }
+              );
+              const pData = await photoRes.json();
+              if (pData.error) {
+                console.error("Error uploading carousel item:", pData.error);
+                throw new Error(pData.error.message || "Failed to upload photo for carousel");
+              }
+              if (pData.id) {
+                photoIds.push(pData.id);
+              }
+            }
+
+            // Step 2: Create Feed post containing all attached media
+            const feedPayload: any = {
+              message: caption || "",
+              access_token: fbToken,
+              attached_media: photoIds.map((id) => ({ media_fbid: id })),
+            };
+
+            if (scheduleEpoch) {
+              feedPayload.published = false;
+              feedPayload.scheduled_publish_time = scheduleEpoch;
+            }
+
+            const multiRes = await fetch(
+              `https://graph.facebook.com/v19.0/${fbPageId}/feed`,
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(feedPayload),
+              }
+            );
+            const multiData = await multiRes.json();
+            if (multiData.error) {
+              console.error("Multi-photo Feed Error:", multiData.error);
+              throw new Error(multiData.error.message || "Facebook Carousel Feed Publish Failed");
+            }
+            fbPostId = multiData.id;
+            console.log("Facebook Multi-Photo Carousel Published successfully. ID:", fbPostId);
           }
-          fbPostId = photoData.post_id || photoData.id;
 
         } else {
           // ==========================================
