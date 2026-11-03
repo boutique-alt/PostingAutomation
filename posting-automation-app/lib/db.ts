@@ -55,7 +55,7 @@ try {
     );
   `);
 
-  // Auto-seed default Ronit lifestyle if empty so it's always ready immediately
+  // Auto-seed default Ronit lifestyle & Hasibul if empty so they are always ready immediately
   const countRow = db.prepare("SELECT COUNT(*) as cnt FROM clients").get() as { cnt: number };
   if (!countRow || countRow.cnt === 0) {
     const insertClient = db.prepare(`
@@ -71,6 +71,32 @@ try {
       "EAA7rTrq82k4BSyHOauZABNsPwiD0PJ8kvabvrOMRZB7ZBmdKcrNa1zOmcjEpU5wMx01VFcOk0IziQqjmo4gVZCgkNAav1QR8MDETeonqpsJOgfZBZBAqBZC3vLgcecL7hppZBbvz5PhjOZAZAPxjGRCZCdPRRiiSv0C5q6ScZCs2vhEKnuNjOJO5lR4g6BZCETr9QConZCxmYZD",
       1
     );
+    insertClient.run(
+      "proj_hasibul",
+      "Hasibul",
+      "facebook",
+      "Hasibul",
+      "1415107628351660",
+      "EAA7rTrq82k4BSZCN9G5jAAAYIS4J8XStYMcWZCraFTz049Ia6XtrZA2j2iOk2xKKJbGErqJzacxJom9t9ttBnz0DaCv4ZCu7gZC0UMyW4tsXoBTZCcfpufAs2DQkAJ6OWbbf5LefVKBMphaOPjXZA6hRdrEHphS94ZCIXR0AQfAzRZCjGyBbjQ1ts3m3S21qcA4zdE2k4",
+      1
+    );
+  } else {
+    // Ensure Hasibul is also present if database was already created with 1 client
+    const hasHasibul = db.prepare("SELECT id FROM clients WHERE id = 'proj_hasibul'").get();
+    if (!hasHasibul) {
+      db.prepare(`
+        INSERT OR IGNORE INTO clients (id, name, connectMode, fbPageName, fbPageId, fbAccessToken, fbConnected)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        "proj_hasibul",
+        "Hasibul",
+        "facebook",
+        "Hasibul",
+        "1415107628351660",
+        "EAA7rTrq82k4BSZCN9G5jAAAYIS4J8XStYMcWZCraFTz049Ia6XtrZA2j2iOk2xKKJbGErqJzacxJom9t9ttBnz0DaCv4ZCu7gZC0UMyW4tsXoBTZCcfpufAs2DQkAJ6OWbbf5LefVKBMphaOPjXZA6hRdrEHphS94ZCIXR0AQfAzRZCjGyBbjQ1ts3m3S21qcA4zdE2k4",
+        1
+      );
+    }
   }
 } catch (e) {
   console.warn("SQLite initialization note (e.g. read-only serverless environment):", e);
