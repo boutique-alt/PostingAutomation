@@ -105,6 +105,17 @@ export default function SocialComposer() {
         connected: true,
       },
     },
+    {
+      id: "proj_hasibul",
+      name: "Hasibul",
+      connectMode: "facebook",
+      facebook: {
+        pageName: "Hasibul",
+        pageId: "1415107628351660",
+        accessToken: "EAA7rTrq82k4BSZC8R2FQqrljNwOCGpTXeQWCrTFRZAZB2xrvrJScUhpY4ZB24lAE9PJVAHE66ZBDJUzkhZB3YDA9FHGOP1MweHDEjguq6SGqNNZBsUJW2sApNd0xocFnWLciZAB2q3GZCZAhYoQgjbJVFRf6mdnu4nozKgIXiqUqZAppFZA2msCI7OZCa8wov78TwNVpJSZBgDnqmLKAswFQWrpsR8555shUYTSmdZBYa7LkXoabNYfjwZDZD",
+        connected: true,
+      },
+    },
   ]);
   const [isLoaded, setIsLoaded] = useState<boolean>(true);
 
