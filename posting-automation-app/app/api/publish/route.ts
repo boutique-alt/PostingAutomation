@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
 
+export const dynamic = "force-dynamic";
+export const maxDuration = 60; // Allow up to 60s for video upload processing
+
 export async function POST(req: Request) {
   try {
     const contentType = req.headers.get("content-type") || "";

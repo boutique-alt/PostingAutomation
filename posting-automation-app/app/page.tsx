@@ -583,7 +583,15 @@ export default function SocialComposer() {
         body: formData,
       });
 
-      const data = await res.json();
+      const text = await res.text();
+      let data: any = {};
+      try {
+        data = text ? JSON.parse(text) : {};
+      } catch (jsonErr) {
+        console.error("Failed to parse publish JSON:", jsonErr, "Raw body:", text);
+        data = { error: text || `Server returned status ${res.status}` };
+      }
+
       if (res.ok && data.success) {
         const newHistoryItem: PostHistoryItem = {
           id: "post_" + Date.now(),
@@ -644,8 +652,9 @@ export default function SocialComposer() {
         setPostHistory((prev) => [failedItem, ...prev]);
         alert("Publish Failed: " + errorMsg);
       }
-    } catch {
-      alert("A network error occurred while publishing.");
+    } catch (err: any) {
+      console.error("Publish execution error:", err);
+      alert("A network or server error occurred while publishing: " + (err?.message || "Unknown error"));
     } finally {
       setIsPublishing(false);
     }
