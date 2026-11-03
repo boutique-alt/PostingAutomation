@@ -29,18 +29,39 @@ export async function POST(req: Request) {
     });
 
     const resText = await fbChunkRes.text();
-    if (!fbChunkRes.ok) {
-      return NextResponse.json({ error: resText }, { status: fbChunkRes.status });
-    }
-
-    let parsed = {};
+    let parsed: any = {};
     try {
       parsed = JSON.parse(resText);
     } catch {
       parsed = { raw: resText };
     }
 
-    return NextResponse.json({ success: true, data: parsed });
+    // Facebook returns HTTP 200 with PartialRequestError for intermediate chunks. That is normal and successful.
+    // Only fail if status is not 200 or there's a fatal error.
+    if (!fbChunkRes.ok) {
+      return NextResponse.json({ error: resText }, { status: fbChunkRes.status });
+    }
+
+    // Query current server offset to ensure next chunk starts at the exact offset
+    let currentOffset = Number(offset) + chunkArrayBuffer.byteLength;
+    try {
+      const offsetQuery = await fetch(uploadUrl, {
+        method: "GET",
+        headers: { Authorization: `OAuth ${fbToken}` },
+      });
+      const offsetData = await offsetQuery.json();
+      if (typeof offsetData.offset === "number") {
+        currentOffset = offsetData.offset;
+      }
+    } catch (e) {
+      console.warn("Could not query current offset:", e);
+    }
+
+    return NextResponse.json({
+      success: true,
+      data: parsed,
+      nextOffset: currentOffset,
+    });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }

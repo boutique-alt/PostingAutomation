@@ -592,10 +592,19 @@ export default function SocialComposer() {
 
           const upData = await uploadRes.json();
           if (!uploadRes.ok || !upData.success) {
-            throw new Error(upData.error || `Failed to upload video chunk at offset ${offset}`);
+            throw new Error(
+              typeof upData.error === "object"
+                ? JSON.stringify(upData.error)
+                : upData.error || `Failed to upload video chunk at offset ${offset}`
+            );
           }
 
-          offset += chunk.size;
+          // Use the exact confirmed offset returned by Facebook server
+          if (typeof upData.nextOffset === "number" && upData.nextOffset > offset) {
+            offset = upData.nextOffset;
+          } else {
+            offset += chunk.size;
+          }
         }
 
         // Step 3: Finish & Publish Reel
