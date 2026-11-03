@@ -820,8 +820,25 @@ export default function SocialComposer() {
 
         {/* Project Selector & Actions */}
         <div className="flex flex-wrap items-center gap-2">
-          <div className="flex-1 sm:flex-initial flex items-center bg-slate-100 border border-slate-200 rounded-lg px-2.5 py-1.5 gap-1.5 min-w-[130px]">
+          <div className="flex-1 sm:flex-initial flex items-center bg-slate-100 border border-slate-200 rounded-lg px-2.5 py-1.5 gap-2 min-w-[170px]">
             <span className="text-[11px] sm:text-xs text-slate-500 font-medium whitespace-nowrap">Client:</span>
+
+            {/* Active Client Platform Icon Preview */}
+            {activeProject && (
+              <div className="flex items-center gap-1">
+                {activeProject.facebook && (
+                  <span className="text-blue-600 inline-flex items-center" title="Facebook Page Connected">
+                    <FacebookIcon className="!w-3.5 !h-3.5" />
+                  </span>
+                )}
+                {activeProject.instagram && (
+                  <span className="text-pink-600 inline-flex items-center" title="Instagram Connected">
+                    <InstagramIcon className="!w-3.5 !h-3.5" />
+                  </span>
+                )}
+              </div>
+            )}
+
             <select
               value={activeProjectId}
               onChange={(e) => {
@@ -846,11 +863,19 @@ export default function SocialComposer() {
                   No Clients Connected
                 </option>
               ) : (
-                projects.map((proj) => (
-                  <option key={proj.id} value={proj.id} className="bg-white text-slate-900">
-                    {proj.name} ({proj.connectMode.toUpperCase()})
-                  </option>
-                ))
+                projects.map((proj) => {
+                  const tag =
+                    proj.connectMode === "both"
+                      ? "[FB + IG]"
+                      : proj.connectMode === "instagram"
+                      ? "[IG]"
+                      : "[FB]";
+                  return (
+                    <option key={proj.id} value={proj.id} className="bg-white text-slate-900">
+                      {proj.name} {tag}
+                    </option>
+                  );
+                })
               )}
             </select>
           </div>
@@ -1515,7 +1540,19 @@ export default function SocialComposer() {
                 <div key={client.id} className="py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-4">
                   <div>
                     <div className="flex items-center gap-2">
-                      <h4 className="text-xs font-bold text-slate-900">{client.name}</h4>
+                      <h4 className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                        {client.name}
+                        {client.facebook && (
+                          <span className="text-blue-600 inline-flex items-center" title="Facebook Connected">
+                            <FacebookIcon className="!w-3.5 !h-3.5" />
+                          </span>
+                        )}
+                        {client.instagram && (
+                          <span className="text-pink-600 inline-flex items-center" title="Instagram Connected">
+                            <InstagramIcon className="!w-3.5 !h-3.5" />
+                          </span>
+                        )}
+                      </h4>
                       <span className="text-[10px] bg-slate-100 text-slate-600 border border-slate-200 px-1.5 py-0.5 rounded font-mono uppercase">
                         {client.connectMode}
                       </span>
