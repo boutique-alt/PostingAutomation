@@ -549,6 +549,104 @@ export default function SocialComposer() {
     setPublishSuccess(null);
 
     try {
+      const fbPageId = activeProject.facebook?.pageId;
+      const fbToken = activeProject.facebook?.accessToken;
+
+      // =========================================================================
+      // DIRECT META REELS RESUMABLE UPLOAD (Bypasses Vercel 4.5MB Payload Limit)
+      // =========================================================================
+      if (postType === "reel" && mediaFiles.length > 0 && mediaFiles[0].file && targetPlatforms.facebook && fbPageId && fbToken) {
+        const videoFile = mediaFiles[0].file;
+
+        // Step 1: Start Reels Session via API
+        const startRes = await fetch("/api/reels/start", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ fbPageId, fbToken }),
+        });
+        const startData = await startRes.json();
+        if (!startRes.ok || !startData.success) {
+          throw new Error(startData.error || "Failed to initialize Facebook Reels session.");
+        }
+
+        const { videoId, uploadUrl } = startData;
+
+        // Step 2: Direct Binary Upload directly to Facebook CDN (rupload.facebook.com)
+        const uploadRes = await fetch(uploadUrl, {
+          method: "POST",
+          headers: {
+            Authorization: `OAuth ${fbToken}`,
+            offset: "0",
+            file_size: String(videoFile.size),
+            "Content-Type": "application/octet-stream",
+          },
+          body: videoFile,
+        });
+
+        if (!uploadRes.ok) {
+          const upErr = await uploadRes.text();
+          throw new Error("Failed to stream video bytes to Facebook: " + upErr);
+        }
+
+        // Step 3: Finish & Publish Reel
+        let epochSeconds: number | null = null;
+        if (isScheduled && scheduleTime) {
+          epochSeconds = Math.floor(new Date(scheduleTime).getTime() / 1000);
+        }
+
+        const finishRes = await fetch("/api/reels/finish", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            fbPageId,
+            fbToken,
+            videoId,
+            caption,
+            scheduleEpoch: epochSeconds,
+          }),
+        });
+        const finishData = await finishRes.json();
+        if (!finishRes.ok || !finishData.success) {
+          throw new Error(finishData.error || "Failed to finalize Facebook Reel.");
+        }
+
+        const newHistoryItem: PostHistoryItem = {
+          id: "post_" + Date.now(),
+          projectName: activeProject.name,
+          platforms: selectedList,
+          postType: "reel",
+          caption,
+          status: isScheduled ? "scheduled" : "published",
+          time: isScheduled ? `Scheduled for ${scheduleTime}` : "Just now",
+          mediaCount: 1,
+        };
+
+        fetch("/api/history", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...newHistoryItem, clientId: activeProject.id }),
+        }).catch(() => {});
+
+        setPostHistory((prev) => [newHistoryItem, ...prev]);
+
+        setPublishSuccess(
+          isScheduled
+            ? `Reel successfully scheduled for ${scheduleTime} on ${selectedList.join(" & ")}!`
+            : `Reel published successfully on ${selectedList.join(" & ")}!`
+        );
+
+        setTimeout(() => {
+          setCaption("");
+          setMediaFiles([]);
+          setIsScheduled(false);
+          setPublishSuccess(null);
+        }, 5000);
+        return;
+      }
+
+      // =========================================================================
+      // STANDARD POSTER & CAROUSEL PUBLISH
+      // =========================================================================
       const formData = new FormData();
       formData.append("projectId", activeProject.id);
       formData.append("projectName", activeProject.name);
