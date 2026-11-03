@@ -165,6 +165,7 @@ export default function SocialComposer() {
   const [showAddModal, setShowAddModal] = useState<boolean>(false);
   const [showManageModal, setShowManageModal] = useState<boolean>(false);
   const [showHistoryModal, setShowHistoryModal] = useState<boolean>(false);
+  const [showClientDropdown, setShowClientDropdown] = useState<boolean>(false);
   const [editingClientId, setEditingClientId] = useState<string | null>(null);
 
   // Testing token feedback
@@ -820,64 +821,92 @@ export default function SocialComposer() {
 
         {/* Project Selector & Actions */}
         <div className="flex flex-wrap items-center gap-2">
-          <div className="flex-1 sm:flex-initial flex items-center bg-slate-100 border border-slate-200 rounded-lg px-2.5 py-1.5 gap-2 min-w-[170px]">
-            <span className="text-[11px] sm:text-xs text-slate-500 font-medium whitespace-nowrap">Client:</span>
-
-            {/* Active Client Platform Icon Preview */}
-            {activeProject && (
-              <div className="flex items-center gap-1">
-                {activeProject.facebook && (
-                  <span className="text-blue-600 inline-flex items-center" title="Facebook Page Connected">
-                    <FacebookIcon className="!w-3.5 !h-3.5" />
-                  </span>
-                )}
-                {activeProject.instagram && (
-                  <span className="text-pink-600 inline-flex items-center" title="Instagram Connected">
-                    <InstagramIcon className="!w-3.5 !h-3.5" />
-                  </span>
-                )}
-              </div>
-            )}
-
-            <select
-              value={activeProjectId}
-              onChange={(e) => {
-                const newId = e.target.value;
-                setActiveProjectId(newId);
-                const selected = projects.find((p) => p.id === newId);
-                if (selected) {
-                  setTargetPlatforms({
-                    facebook: !!selected.facebook,
-                    instagram: !!selected.instagram,
-                  });
-                }
-              }}
-              className="bg-transparent text-xs font-bold text-slate-900 focus:outline-none cursor-pointer w-full truncate"
+          {/* Custom Client Selector with Rich Real Platform Icons */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setShowClientDropdown((prev) => !prev)}
+              className="flex items-center bg-slate-100 hover:bg-slate-200/80 border border-slate-200 rounded-lg px-2.5 py-1.5 gap-2 transition cursor-pointer min-w-[170px]"
             >
-              {!isLoaded ? (
-                <option value="" className="bg-white text-slate-500">
-                  Loading clients...
-                </option>
-              ) : projects.length === 0 ? (
-                <option value="" className="bg-white text-slate-500">
-                  No Clients Connected
-                </option>
+              <span className="text-[11px] sm:text-xs text-slate-500 font-medium">Client:</span>
+
+              {activeProject ? (
+                <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                  <span className="text-xs font-bold text-slate-900 truncate">
+                    {activeProject.name}
+                  </span>
+                  <div className="flex items-center gap-1 ml-auto flex-shrink-0">
+                    {activeProject.facebook && (
+                      <span className="text-blue-600 inline-flex items-center" title="Facebook Page Connected">
+                        <FacebookIcon className="!w-4 !h-4" />
+                      </span>
+                    )}
+                    {activeProject.instagram && (
+                      <span className="text-pink-600 inline-flex items-center" title="Instagram Connected">
+                        <InstagramIcon className="!w-4 !h-4" />
+                      </span>
+                    )}
+                  </div>
+                </div>
               ) : (
-                projects.map((proj) => {
-                  const tag =
-                    proj.connectMode === "both"
-                      ? "[FB + IG]"
-                      : proj.connectMode === "instagram"
-                      ? "[IG]"
-                      : "[FB]";
-                  return (
-                    <option key={proj.id} value={proj.id} className="bg-white text-slate-900">
-                      {proj.name} {tag}
-                    </option>
-                  );
-                })
+                <span className="text-xs text-slate-400 font-medium">No Client</span>
               )}
-            </select>
+              <span className="text-[10px] text-slate-400">▼</span>
+            </button>
+
+            {/* Dropdown Menu */}
+            {showClientDropdown && (
+              <>
+                <div
+                  className="fixed inset-0 z-40"
+                  onClick={() => setShowClientDropdown(false)}
+                />
+                <div className="absolute left-0 mt-1.5 w-60 bg-white border border-slate-200 rounded-xl shadow-xl z-50 py-1.5 overflow-hidden animate-in fade-in slide-in-from-top-1 duration-150">
+                  <div className="px-3 py-1 border-b border-slate-100 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                    Select Brand / Client
+                  </div>
+                  {projects.length === 0 ? (
+                    <div className="px-3 py-3 text-xs text-slate-400 text-center">
+                      No clients found.
+                    </div>
+                  ) : (
+                    projects.map((proj) => (
+                      <button
+                        key={proj.id}
+                        type="button"
+                        onClick={() => {
+                          setActiveProjectId(proj.id);
+                          setTargetPlatforms({
+                            facebook: !!proj.facebook,
+                            instagram: !!proj.instagram,
+                          });
+                          setShowClientDropdown(false);
+                        }}
+                        className={`w-full px-3 py-2 text-left flex items-center justify-between text-xs transition cursor-pointer ${
+                          proj.id === activeProjectId
+                            ? "bg-blue-50 text-blue-900 font-bold"
+                            : "hover:bg-slate-50 text-slate-700"
+                        }`}
+                      >
+                        <span className="truncate">{proj.name}</span>
+                        <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
+                          {proj.facebook && (
+                            <span className="text-blue-600 inline-flex items-center" title="Facebook">
+                              <FacebookIcon className="!w-3.5 !h-3.5" />
+                            </span>
+                          )}
+                          {proj.instagram && (
+                            <span className="text-pink-600 inline-flex items-center" title="Instagram">
+                              <InstagramIcon className="!w-3.5 !h-3.5" />
+                            </span>
+                          )}
+                        </div>
+                      </button>
+                    ))
+                  )}
+                </div>
+              </>
+            )}
           </div>
 
           <button
