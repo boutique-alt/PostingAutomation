@@ -571,21 +571,31 @@ export default function SocialComposer() {
 
         const { videoId, uploadUrl } = startData;
 
-        // Step 2: Direct Binary Upload directly to Facebook CDN (rupload.facebook.com)
-        const uploadRes = await fetch(uploadUrl, {
-          method: "POST",
-          headers: {
-            Authorization: `OAuth ${fbToken}`,
-            offset: "0",
-            file_size: String(videoFile.size),
-            "Content-Type": "application/octet-stream",
-          },
-          body: videoFile,
-        });
+        // Step 2: Upload Video via Chunked/Streamed Proxy (Bypasses both Vercel 4.5MB limit and Facebook CORS)
+        const CHUNK_SIZE = 3 * 1024 * 1024; // 3MB chunks (Well within Vercel's 4.5MB limit)
+        const totalSize = videoFile.size;
+        let offset = 0;
 
-        if (!uploadRes.ok) {
-          const upErr = await uploadRes.text();
-          throw new Error("Failed to stream video bytes to Facebook: " + upErr);
+        while (offset < totalSize) {
+          const chunk = videoFile.slice(offset, Math.min(offset + CHUNK_SIZE, totalSize));
+          const uploadRes = await fetch("/api/reels/chunk", {
+            method: "POST",
+            headers: {
+              "x-upload-url": uploadUrl,
+              "x-fb-token": fbToken,
+              "x-offset": String(offset),
+              "x-file-size": String(totalSize),
+              "Content-Type": "application/octet-stream",
+            },
+            body: chunk,
+          });
+
+          const upData = await uploadRes.json();
+          if (!uploadRes.ok || !upData.success) {
+            throw new Error(upData.error || `Failed to upload video chunk at offset ${offset}`);
+          }
+
+          offset += chunk.size;
         }
 
         // Step 3: Finish & Publish Reel
