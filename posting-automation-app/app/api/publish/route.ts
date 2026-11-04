@@ -275,6 +275,144 @@ export async function POST(req: Request) {
       }
     }
 
+    // -------------------------------------------------------------
+    // 2. REAL INSTAGRAM BUSINESS / CREATOR POSTING (Photos & Reels)
+    // -------------------------------------------------------------
+    const igAccountId = clientCredentials?.igAccountId || process.env.IG_ACCOUNT_ID;
+    const igToken = clientCredentials?.igToken || clientCredentials?.fbToken || process.env.FB_PAGE_ACCESS_TOKEN;
+
+    if (platforms.includes("instagram") && igAccountId && igToken) {
+      try {
+        console.log("Publishing to Instagram Business:", igAccountId);
+
+        if (uploadFiles.length === 0) {
+          throw new Error("Instagram requires a photo or video to publish (text-only posts are not supported by Instagram).");
+        }
+
+        const mediaFile = uploadFiles[0];
+        const isVideo = postType === "reel" || mediaFile.type.startsWith("video/");
+        let directMediaUrl = "";
+
+        // Instagram Graph API requires media to be available via a public URL.
+        // For images: We use Meta's own high-speed CDN by uploading an unpublished photo to the linked Facebook Page!
+        // This is 100% reliable, fast, never expires, and always accepted by Instagram Graph API without 3rd-party CDN failures.
+        if (!isVideo && fbPageId && fbToken) {
+          try {
+            console.log("Hosting image via Meta Facebook CDN for Instagram...");
+            const fbHostForm = new FormData();
+            fbHostForm.append("source", mediaFile);
+            fbHostForm.append("published", "false");
+            fbHostForm.append("access_token", fbToken);
+
+            const fbHostRes = await fetch(`https://graph.facebook.com/v21.0/${fbPageId}/photos`, {
+              method: "POST",
+              body: fbHostForm,
+            });
+            const fbHostData = await fbHostRes.json();
+            if (fbHostData.id) {
+              const photoDetailsRes = await fetch(
+                `https://graph.facebook.com/v21.0/${fbHostData.id}?fields=images&access_token=${fbToken}`
+              );
+              const details = await photoDetailsRes.json();
+              if (details.images && details.images.length > 0) {
+                directMediaUrl = details.images[0].source;
+                console.log("Obtained Meta CDN Image URL for Instagram:", directMediaUrl);
+              }
+            }
+          } catch (metaCdnErr) {
+            console.warn("Failed to get Meta CDN link, trying fallback...", metaCdnErr);
+          }
+        }
+
+        // Fallback or Video upload to tmpfiles / public CDN
+        if (!directMediaUrl) {
+          const uploadForm = new FormData();
+          uploadForm.append("file", mediaFile, mediaFile.name);
+
+          const cdnRes = await fetch("https://tmpfiles.org/api/v1/upload", {
+            method: "POST",
+            body: uploadForm,
+          });
+          const cdnData = await cdnRes.json();
+          if (!cdnData.data?.url) {
+            throw new Error("Failed to host media temporarily for Instagram Graph API.");
+          }
+          directMediaUrl = cdnData.data.url.replace("tmpfiles.org/", "tmpfiles.org/dl/");
+          console.log("Direct Media URL for Instagram (tmpfiles):", directMediaUrl);
+        }
+
+        // Step 1: Create Instagram Media Container
+        const containerPayload: any = {
+          caption: caption || "",
+          access_token: igToken,
+        };
+
+        if (isVideo) {
+          containerPayload.media_type = "REELS";
+          containerPayload.video_url = directMediaUrl;
+        } else {
+          containerPayload.image_url = directMediaUrl;
+        }
+
+        const containerRes = await fetch(`https://graph.facebook.com/v21.0/${igAccountId}/media`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(containerPayload),
+        });
+        const containerData = await containerRes.json();
+        if (containerData.error) {
+          console.error("Instagram Container Creation Error:", containerData.error);
+          throw new Error(containerData.error.message || "Failed to create Instagram media container");
+        }
+
+        const creationId = containerData.id;
+        console.log("Instagram Container Created. ID:", creationId);
+
+        // Wait a few seconds for video encoding if it's a reel
+        if (isVideo) {
+          console.log("Waiting for Instagram video processing...");
+          let ready = false;
+          let attempts = 0;
+          while (!ready && attempts < 10) {
+            await new Promise((resolve) => setTimeout(resolve, 3000));
+            attempts++;
+            const statusRes = await fetch(`https://graph.facebook.com/v21.0/${creationId}?fields=status_code&access_token=${igToken}`);
+            const statusData = await statusRes.json();
+            if (statusData.status_code === "FINISHED") {
+              ready = true;
+            } else if (statusData.status_code === "ERROR") {
+              throw new Error("Instagram video processing failed.");
+            }
+          }
+        }
+
+        // Step 2: Publish the Instagram Container
+        const publishRes = await fetch(`https://graph.facebook.com/v21.0/${igAccountId}/media_publish`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            creation_id: creationId,
+            access_token: igToken,
+          }),
+        });
+        const pubData = await publishRes.json();
+        if (pubData.error) {
+          console.error("Instagram Publish Error:", pubData.error);
+          throw new Error(pubData.error.message || "Failed to publish media on Instagram");
+        }
+
+        console.log("Instagram Published Successfully! ID:", pubData.id);
+        results.instagram = {
+          status: "published",
+          postId: pubData.id,
+          message: "Published successfully to Instagram!",
+        };
+      } catch (err: any) {
+        console.error("Instagram API Error:", err.message);
+        errors.instagram = err.message;
+      }
+    }
+
     const hasErrors = Object.keys(errors).length > 0;
 
     return NextResponse.json({

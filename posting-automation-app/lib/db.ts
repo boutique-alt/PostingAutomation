@@ -59,8 +59,12 @@ try {
   const countRow = db.prepare("SELECT COUNT(*) as cnt FROM clients").get() as { cnt: number };
   if (!countRow || countRow.cnt === 0) {
     const insertClient = db.prepare(`
-      INSERT OR IGNORE INTO clients (id, name, connectMode, fbPageName, fbPageId, fbAccessToken, fbConnected)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      INSERT OR IGNORE INTO clients (
+        id, name, connectMode,
+        fbPageName, fbPageId, fbAccessToken, fbConnected,
+        igUsername, igAccountId, igAccessToken, igConnected
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     insertClient.run(
       "proj_ronit",
@@ -69,34 +73,48 @@ try {
       "Ronit lifestyle",
       "274954512375449",
       "EAA7rTrq82k4BSyHOauZABNsPwiD0PJ8kvabvrOMRZB7ZBmdKcrNa1zOmcjEpU5wMx01VFcOk0IziQqjmo4gVZCgkNAav1QR8MDETeonqpsJOgfZBZBAqBZC3vLgcecL7hppZBbvz5PhjOZAZAPxjGRCZCdPRRiiSv0C5q6ScZCs2vhEKnuNjOJO5lR4g6BZCETr9QConZCxmYZD",
-      1
+      1,
+      null,
+      null,
+      null,
+      0
     );
     insertClient.run(
       "proj_hasibul",
       "Hasibul",
-      "facebook",
+      "both",
       "Hasibul",
       "1415107628351660",
-      "EAA7rTrq82k4BSZCN9G5jAAAYIS4J8XStYMcWZCraFTz049Ia6XtrZA2j2iOk2xKKJbGErqJzacxJom9t9ttBnz0DaCv4ZCu7gZC0UMyW4tsXoBTZCcfpufAs2DQkAJ6OWbbf5LefVKBMphaOPjXZA6hRdrEHphS94ZCIXR0AQfAzRZCjGyBbjQ1ts3m3S21qcA4zdE2k4",
+      "EAA7rTrq82k4BSzOQNOzi6AQgyGFPwTGfX0V01LuH52Ukt1TuxUguXEFZBOVYJT7GFklj5a4eDklZC5co2QwIMMZCb1NhQY18fHGnwwQzMIj5wVJnbQZB9YFgep3AmdAzqHV8hZCw2955ZCYphJ6Ig2wrbG9eP6ZBDgHO47XNqqEAJvfaOu9VZCWyI5fIKYaV3CrnuFSMAByxogKQKkHfunOJ0lpA2kNG4GE0gA3LQw4ZD",
+      1,
+      "testing5810",
+      "17841439096613191",
+      "EAA7rTrq82k4BSzOQNOzi6AQgyGFPwTGfX0V01LuH52Ukt1TuxUguXEFZBOVYJT7GFklj5a4eDklZC5co2QwIMMZCb1NhQY18fHGnwwQzMIj5wVJnbQZB9YFgep3AmdAzqHV8hZCw2955ZCYphJ6Ig2wrbG9eP6ZBDgHO47XNqqEAJvfaOu9VZCWyI5fIKYaV3CrnuFSMAByxogKQKkHfunOJ0lpA2kNG4GE0gA3LQw4ZD",
       1
     );
   } else {
-    // Ensure Hasibul is also present if database was already created with 1 client
-    const hasHasibul = db.prepare("SELECT id FROM clients WHERE id = 'proj_hasibul'").get();
-    if (!hasHasibul) {
-      db.prepare(`
-        INSERT OR IGNORE INTO clients (id, name, connectMode, fbPageName, fbPageId, fbAccessToken, fbConnected)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-      `).run(
-        "proj_hasibul",
-        "Hasibul",
-        "facebook",
-        "Hasibul",
-        "1415107628351660",
-        "EAA7rTrq82k4BSZCN9G5jAAAYIS4J8XStYMcWZCraFTz049Ia6XtrZA2j2iOk2xKKJbGErqJzacxJom9t9ttBnz0DaCv4ZCu7gZC0UMyW4tsXoBTZCcfpufAs2DQkAJ6OWbbf5LefVKBMphaOPjXZA6hRdrEHphS94ZCIXR0AQfAzRZCjGyBbjQ1ts3m3S21qcA4zdE2k4",
-        1
-      );
-    }
+    // Ensure Hasibul is always up-to-date with both Facebook & Instagram credentials
+    const updateHasibul = db.prepare(`
+      INSERT OR REPLACE INTO clients (
+        id, name, connectMode,
+        fbPageName, fbPageId, fbAccessToken, fbConnected,
+        igUsername, igAccountId, igAccessToken, igConnected
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    updateHasibul.run(
+      "proj_hasibul",
+      "Hasibul",
+      "both",
+      "Hasibul",
+      "1415107628351660",
+      "EAA7rTrq82k4BSzOQNOzi6AQgyGFPwTGfX0V01LuH52Ukt1TuxUguXEFZBOVYJT7GFklj5a4eDklZC5co2QwIMMZCb1NhQY18fHGnwwQzMIj5wVJnbQZB9YFgep3AmdAzqHV8hZCw2955ZCYphJ6Ig2wrbG9eP6ZBDgHO47XNqqEAJvfaOu9VZCWyI5fIKYaV3CrnuFSMAByxogKQKkHfunOJ0lpA2kNG4GE0gA3LQw4ZD",
+      1,
+      "testing5810",
+      "17841439096613191",
+      "EAA7rTrq82k4BSzOQNOzi6AQgyGFPwTGfX0V01LuH52Ukt1TuxUguXEFZBOVYJT7GFklj5a4eDklZC5co2QwIMMZCb1NhQY18fHGnwwQzMIj5wVJnbQZB9YFgep3AmdAzqHV8hZCw2955ZCYphJ6Ig2wrbG9eP6ZBDgHO47XNqqEAJvfaOu9VZCWyI5fIKYaV3CrnuFSMAByxogKQKkHfunOJ0lpA2kNG4GE0gA3LQw4ZD",
+      1
+    );
   }
 } catch (e) {
   console.warn("SQLite initialization note (e.g. read-only serverless environment):", e);

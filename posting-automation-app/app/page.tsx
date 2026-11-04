@@ -108,11 +108,17 @@ export default function SocialComposer() {
     {
       id: "proj_hasibul",
       name: "Hasibul",
-      connectMode: "facebook",
+      connectMode: "both",
       facebook: {
         pageName: "Hasibul",
         pageId: "1415107628351660",
-        accessToken: "EAA7rTrq82k4BSZCN9G5jAAAYIS4J8XStYMcWZCraFTz049Ia6XtrZA2j2iOk2xKKJbGErqJzacxJom9t9ttBnz0DaCv4ZCu7gZC0UMyW4tsXoBTZCcfpufAs2DQkAJ6OWbbf5LefVKBMphaOPjXZA6hRdrEHphS94ZCIXR0AQfAzRZCjGyBbjQ1ts3m3S21qcA4zdE2k4",
+        accessToken: "EAA7rTrq82k4BSzOQNOzi6AQgyGFPwTGfX0V01LuH52Ukt1TuxUguXEFZBOVYJT7GFklj5a4eDklZC5co2QwIMMZCb1NhQY18fHGnwwQzMIj5wVJnbQZB9YFgep3AmdAzqHV8hZCw2955ZCYphJ6Ig2wrbG9eP6ZBDgHO47XNqqEAJvfaOu9VZCWyI5fIKYaV3CrnuFSMAByxogKQKkHfunOJ0lpA2kNG4GE0gA3LQw4ZD",
+        connected: true,
+      },
+      instagram: {
+        username: "testing5810",
+        accountId: "17841439096613191",
+        accessToken: "EAA7rTrq82k4BSzOQNOzi6AQgyGFPwTGfX0V01LuH52Ukt1TuxUguXEFZBOVYJT7GFklj5a4eDklZC5co2QwIMMZCb1NhQY18fHGnwwQzMIj5wVJnbQZB9YFgep3AmdAzqHV8hZCw2955ZCYphJ6Ig2wrbG9eP6ZBDgHO47XNqqEAJvfaOu9VZCWyI5fIKYaV3CrnuFSMAByxogKQKkHfunOJ0lpA2kNG4GE0gA3LQw4ZD",
         connected: true,
       },
     },
