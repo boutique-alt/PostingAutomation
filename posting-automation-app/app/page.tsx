@@ -112,13 +112,13 @@ export default function SocialComposer() {
       facebook: {
         pageName: "Hasibul",
         pageId: "1415107628351660",
-        accessToken: "EAA7rTrq82k4BSzOQNOzi6AQgyGFPwTGfX0V01LuH52Ukt1TuxUguXEFZBOVYJT7GFklj5a4eDklZC5co2QwIMMZCb1NhQY18fHGnwwQzMIj5wVJnbQZB9YFgep3AmdAzqHV8hZCw2955ZCYphJ6Ig2wrbG9eP6ZBDgHO47XNqqEAJvfaOu9VZCWyI5fIKYaV3CrnuFSMAByxogKQKkHfunOJ0lpA2kNG4GE0gA3LQw4ZD",
+        accessToken: "EAA7rTrq82k4BS5AP2gyzC4XZCmZCMSGyogTyZCMYUNZBMgZB4uQzTZB89WmHX8ayqYpc4zofdZBzwsOG60lkA4R1Mk4vxOGNKml9Ungtj0ZBNZAmtCSXqYqkfZAVxZAzm6njTLJuNvT9ihwzSg2POPzrmk4LDlGygCDa9KnZCi6z4K0aGjqo5BDkdw4ZBOI6D9Vk7pudzHAVyRlnK",
         connected: true,
       },
       instagram: {
         username: "testing5810",
         accountId: "17841439096613191",
-        accessToken: "EAA7rTrq82k4BSzOQNOzi6AQgyGFPwTGfX0V01LuH52Ukt1TuxUguXEFZBOVYJT7GFklj5a4eDklZC5co2QwIMMZCb1NhQY18fHGnwwQzMIj5wVJnbQZB9YFgep3AmdAzqHV8hZCw2955ZCYphJ6Ig2wrbG9eP6ZBDgHO47XNqqEAJvfaOu9VZCWyI5fIKYaV3CrnuFSMAByxogKQKkHfunOJ0lpA2kNG4GE0gA3LQw4ZD",
+        accessToken: "EAA7rTrq82k4BS5AP2gyzC4XZCmZCMSGyogTyZCMYUNZBMgZB4uQzTZB89WmHX8ayqYpc4zofdZBzwsOG60lkA4R1Mk4vxOGNKml9Ungtj0ZBNZAmtCSXqYqkfZAVxZAzm6njTLJuNvT9ihwzSg2POPzrmk4LDlGygCDa9KnZCi6z4K0aGjqo5BDkdw4ZBOI6D9Vk7pudzHAVyRlnK",
         connected: true,
       },
     },
