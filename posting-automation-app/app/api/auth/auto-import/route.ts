@@ -21,21 +21,26 @@ export async function POST(req: NextRequest) {
 
     // 1. Fetch user's managed Facebook Pages and linked Instagram accounts
     let pages: any[] = [];
+    let tokenExpiryError: string | null = null;
 
     // Attempt 1: Use Meta debug_token with App Credentials (Best & 100% Reliable!)
-    // It inspects any token (User Token or Page Token) and gives the exact Page/User Profile ID
+    // It inspects any token (User Token or Page Token) and gives the exact Page/User Profile ID and allowed target_ids
     if (appId && appSecret) {
       try {
         const debugUrl = `https://graph.facebook.com/v21.0/debug_token?input_token=${userToken}&access_token=${appId}|${appSecret}`;
         const debugRes = await fetch(debugUrl);
         const debugData = await debugRes.json();
 
+        if (debugData.data?.error) {
+          tokenExpiryError = debugData.data.error.message || "Session has expired";
+        }
+
         if (debugData.data?.is_valid) {
           const type = debugData.data.type; // 'PAGE' or 'USER'
-          const profileId = debugData.data.profile_id || debugData.data.user_id;
+          const profileId = debugData.data.profile_id;
 
           if (type === "PAGE" && profileId) {
-            // It's a Page Token! Directly query this page
+            // It's a direct Page Token
             const pRes = await fetch(
               `https://graph.facebook.com/v21.0/${profileId}?fields=id,name,instagram_business_account{id,username,name}&access_token=${userToken}`
             );
@@ -48,14 +53,51 @@ export async function POST(req: NextRequest) {
                 instagram_business_account: pData.instagram_business_account || null,
               });
             }
-          } else if (type === "USER") {
-            // It's a User Token! Query user's accounts
-            const accRes = await fetch(
-              `https://graph.facebook.com/v21.0/me/accounts?fields=id,name,access_token,tasks,instagram_business_account{id,username,name,profile_picture_url}&access_token=${userToken}`
-            );
-            const accData = await accRes.json();
-            if (accData.data && Array.isArray(accData.data)) {
-              pages = accData.data;
+          } else {
+            // It's a User Token!
+            // First check granular_scopes target_ids (Business Login granted pages)
+            const targetPageIds: string[] = [];
+            if (debugData.data.granular_scopes && Array.isArray(debugData.data.granular_scopes)) {
+              for (const sc of debugData.data.granular_scopes) {
+                if (sc.target_ids && Array.isArray(sc.target_ids)) {
+                  for (const tid of sc.target_ids) {
+                    if (!targetPageIds.includes(tid) && !tid.startsWith("1784")) {
+                      targetPageIds.push(tid);
+                    }
+                  }
+                }
+              }
+            }
+
+            // Query each granted target page directly
+            if (targetPageIds.length > 0) {
+              for (const pid of targetPageIds) {
+                try {
+                  const pRes = await fetch(
+                    `https://graph.facebook.com/v21.0/${pid}?fields=id,name,access_token,instagram_business_account{id,username,name}&access_token=${userToken}`
+                  );
+                  const pData = await pRes.json();
+                  if (pData.id && !pData.error) {
+                    pages.push({
+                      id: pData.id,
+                      name: pData.name,
+                      access_token: pData.access_token || userToken,
+                      instagram_business_account: pData.instagram_business_account || null,
+                    });
+                  }
+                } catch (pe) {}
+              }
+            }
+
+            // Also check /me/accounts fallback if needed
+            if (pages.length === 0) {
+              const accRes = await fetch(
+                `https://graph.facebook.com/v21.0/me/accounts?fields=id,name,access_token,tasks,instagram_business_account{id,username,name,profile_picture_url}&access_token=${userToken}`
+              );
+              const accData = await accRes.json();
+              if (accData.data && Array.isArray(accData.data)) {
+                pages = accData.data;
+              }
             }
           }
         }
@@ -71,6 +113,9 @@ export async function POST(req: NextRequest) {
           `https://graph.facebook.com/v21.0/me?fields=id,name,instagram_business_account{id,username,name}&access_token=${userToken}`
         );
         const pageInfo = await pageInfoRes.json();
+        if (pageInfo.error?.code === 190) {
+          tokenExpiryError = pageInfo.error.message;
+        }
         if (pageInfo.id && !pageInfo.error) {
           pages.push({
             id: pageInfo.id,
@@ -88,10 +133,26 @@ export async function POST(req: NextRequest) {
         const pagesUrl = `https://graph.facebook.com/v21.0/me/accounts?fields=id,name,access_token,tasks,instagram_business_account{id,username,name,profile_picture_url}&access_token=${userToken}`;
         const pagesRes = await fetch(pagesUrl);
         const pagesData = await pagesRes.json();
+        if (pagesData.error?.code === 190) {
+          tokenExpiryError = pagesData.error.message;
+        }
         if (pagesData.data && Array.isArray(pagesData.data)) {
           pages = pagesData.data;
         }
       } catch (e) {}
+    }
+
+    if (pages.length === 0) {
+      if (tokenExpiryError) {
+        return NextResponse.json(
+          { error: `This Access Token has expired. Please generate a fresh token from Graph Explorer or Login with Facebook. (${tokenExpiryError})` },
+          { status: 401 }
+        );
+      }
+      return NextResponse.json(
+        { error: "No Facebook Pages found associated with this account or token. Please ensure your token has 'pages_show_list' permission." },
+        { status: 404 }
+      );
     }
 
     if (pages.length === 0) {
@@ -106,14 +167,22 @@ export async function POST(req: NextRequest) {
       pages.map(async (p: any) => {
         let pageToken = p.access_token || userToken;
 
-        // Try exchanging for a permanent Long-Lived Token using App Secret if possible
+        // Try exchanging for a permanent Never-Expiring Long-Lived Page Token using App Secret
         if (appId && appSecret) {
           try {
-            const exchangeUrl = `https://graph.facebook.com/v21.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${appId}&client_secret=${appSecret}&fb_exchange_token=${pageToken}`;
-            const exRes = await fetch(exchangeUrl);
+            // First exchange user token to 60-day token
+            const exUrl = `https://graph.facebook.com/v21.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${appId}&client_secret=${appSecret}&fb_exchange_token=${userToken}`;
+            const exRes = await fetch(exUrl);
             const exData = await exRes.json();
-            if (exData.access_token) {
-              pageToken = exData.access_token;
+            const longUserToken = exData.access_token || userToken;
+
+            // Then fetch permanent never-expiring page token
+            const permPageRes = await fetch(
+              `https://graph.facebook.com/v21.0/${p.id}?fields=access_token,instagram_business_account{id,username,name}&access_token=${longUserToken}`
+            );
+            const permPageData = await permPageRes.json();
+            if (permPageData.access_token) {
+              pageToken = permPageData.access_token;
             }
           } catch (e) {
             console.warn("Long-lived token exchange note:", e);
