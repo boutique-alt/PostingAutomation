@@ -190,7 +190,143 @@ export default function SocialComposer() {
     igPasswordOrToken: "",
   });
 
-  // Database & Local persistence
+  const [isAutoImporting, setIsAutoImporting] = useState<boolean>(false);
+  const [autoTokenInput, setAutoTokenInput] = useState<string>("");
+  const [discoveredPages, setDiscoveredPages] = useState<any[]>([]);
+
+  // Function to initialize Meta Facebook SDK for 1-Click Login
+  useEffect(() => {
+    if (typeof window !== "undefined" && !(window as any).FB) {
+      (window as any).fbAsyncInit = function () {
+        (window as any).FB.init({
+          appId: "4199373046864462",
+          cookie: true,
+          xfbml: true,
+          version: "v21.0",
+        });
+      };
+
+      // Load SDK asynchronously
+      (function (d, s, id) {
+        var js,
+          fjs = d.getElementsByTagName(s)[0];
+        if (d.getElementById(id)) return;
+        js = d.createElement(s) as HTMLScriptElement;
+        js.id = id;
+        js.src = "https://connect.facebook.net/en_US/sdk.js";
+        fjs.parentNode?.insertBefore(js, fjs);
+      })(document, "script", "facebook-jssdk");
+    }
+  }, []);
+
+  const handleMetaOAuthLogin = () => {
+    if (typeof window === "undefined") return;
+
+    if (!(window as any).FB) {
+      // Direct redirect fallback to official Facebook Dialog
+      const redirectUri = encodeURIComponent(window.location.origin);
+      const oauthUrl = `https://www.facebook.com/v21.0/dialog/oauth?client_id=4199373046864462&redirect_uri=${redirectUri}&scope=pages_show_list,pages_read_engagement,pages_manage_posts,instagram_basic,instagram_content_publish&response_type=token`;
+      window.open(oauthUrl, "FacebookLogin", "width=600,height=700");
+      return;
+    }
+
+    setIsAutoImporting(true);
+    setVerificationFeedback("Opening Facebook Login Dialog...");
+
+    (window as any).FB.login(
+      function (response: any) {
+        if (response.authResponse && response.authResponse.accessToken) {
+          const userAccessToken = response.authResponse.accessToken;
+          triggerAutoDiscovery(userAccessToken);
+        } else {
+          setIsAutoImporting(false);
+          setVerificationFeedback("❌ Meta Login was canceled or not authorized.");
+        }
+      },
+      {
+        scope: "pages_show_list,pages_read_engagement,pages_manage_posts,instagram_basic,instagram_content_publish",
+        return_scopes: true,
+      }
+    );
+  };
+
+  const triggerAutoDiscovery = async (token: string) => {
+    if (!token.trim()) {
+      alert("Please enter or paste an Access Token.");
+      return;
+    }
+
+    setIsAutoImporting(true);
+    setVerificationFeedback("🔍 Connecting to Meta API and discovering your Pages & Instagram accounts...");
+
+    try {
+      const res = await fetch("/api/auth/auto-import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: token.trim() }),
+      });
+      const data = await res.json();
+
+      if (data.error) {
+        setIsAutoImporting(false);
+        setVerificationFeedback(`❌ ${data.error}`);
+        return;
+      }
+
+      if (data.accounts && data.accounts.length > 0) {
+        setDiscoveredPages(data.accounts);
+        const first = data.accounts[0];
+
+        // Auto-fill form with the first found account immediately
+        setClientForm((prev) => ({
+          ...prev,
+          name: prev.name || first.fbPageName || "Brand Client",
+          platformType: first.hasInstagram ? "both" : "facebook",
+          fbPageName: first.fbPageName || "",
+          fbPageId: first.fbPageId || "",
+          fbPasswordOrToken: first.fbToken || token,
+          igUsername: first.igUsername || "",
+          igAccountId: first.igAccountId || "",
+          igPasswordOrToken: first.igToken || first.fbToken || token,
+        }));
+
+        setIsAutoImporting(false);
+        setVerificationFeedback(
+          `✅ Found ${data.accounts.length} connected account(s)! Auto-filled with "${first.fbPageName}".`
+        );
+      } else {
+        setIsAutoImporting(false);
+        setVerificationFeedback("⚠️ No pages found. Ensure your Meta user has Admin/Editor access to the page.");
+      }
+    } catch (err: any) {
+      setIsAutoImporting(false);
+      setVerificationFeedback(`❌ Connection error: ${err.message}`);
+    }
+  };
+  // Handle OAuth Token from URL hash if redirected back from Facebook Dialog
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.location.hash) {
+      const hash = window.location.hash.substring(1);
+      const params = new URLSearchParams(hash);
+      const token = params.get("access_token");
+      if (token) {
+        window.history.replaceState(null, "", window.location.pathname);
+        setShowAddModal(true);
+        triggerAutoDiscovery(token);
+      }
+    }
+
+    // Also listen for child popup messages
+    const messageListener = (event: MessageEvent) => {
+      if (event.data && event.data.type === "META_OAUTH_TOKEN" && event.data.token) {
+        setShowAddModal(true);
+        triggerAutoDiscovery(event.data.token);
+      }
+    };
+    window.addEventListener("message", messageListener);
+    return () => window.removeEventListener("message", messageListener);
+  }, []);
+
   useEffect(() => {
     // 1. First, instantly load from localStorage (instant display on Vercel/mobile)
     try {
@@ -432,24 +568,51 @@ export default function SocialComposer() {
     alert(`Post "${post.caption.slice(0, 30)}..." was successfully retried and published!`);
   };
 
-  const handleVerifyCredentials = () => {
+  const handleVerifyCredentials = async () => {
     setIsVerifyingToken(true);
-    setVerificationFeedback(null);
+    setVerificationFeedback("Testing connection to Meta API...");
 
-    setTimeout(() => {
+    const tokenToTest = clientForm.fbPasswordOrToken.trim() || clientForm.igPasswordOrToken.trim();
+
+    if (!tokenToTest) {
       setIsVerifyingToken(false);
-      if (!clientForm.fbPageId && !clientForm.igUsername) {
-        setVerificationFeedback("⚠️ Please provide at least a Page ID or Instagram Username to test.");
+      setVerificationFeedback("⚠️ Please provide an Access Token to verify.");
+      return;
+    }
+
+    try {
+      const res = await fetch("/api/auth/auto-import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: tokenToTest }),
+      });
+      const data = await res.json();
+
+      setIsVerifyingToken(false);
+
+      if (data.success && data.accounts && data.accounts.length > 0) {
+        const found = data.accounts[0];
+        setVerificationFeedback(
+          `✅ Verified! Connected to Facebook Page "${found.fbPageName}" ${
+            found.hasInstagram ? `& Instagram @${found.igUsername}` : ""
+          }`
+        );
+
+        // Auto sync form if values were missing
+        setClientForm((prev) => ({
+          ...prev,
+          fbPageName: prev.fbPageName || found.fbPageName,
+          fbPageId: prev.fbPageId || found.fbPageId,
+          igUsername: prev.igUsername || found.igUsername || "",
+          igAccountId: prev.igAccountId || found.igAccountId || "",
+        }));
       } else {
-        setVerificationFeedback("✅ Token verified! Successfully connected to Meta Graph API.");
-        if (!clientForm.fbPageName && clientForm.fbPageId) {
-          setClientForm((prev) => ({
-            ...prev,
-            fbPageName: prev.name ? `${prev.name} Verified Page` : "Official Meta Page",
-          }));
-        }
+        setVerificationFeedback(`❌ ${data.error || "Could not verify credentials with Meta."}`);
       }
-    }, 900);
+    } catch (err: any) {
+      setIsVerifyingToken(false);
+      setVerificationFeedback(`❌ Verification error: ${err.message}`);
+    }
   };
 
   const handleSaveClient = async () => {
@@ -1681,35 +1844,89 @@ export default function SocialComposer() {
               </button>
             </div>
 
-            {/* Quick 1-Click Meta Login Option */}
-            <div className="p-3 bg-blue-600 text-white rounded-xl flex flex-col sm:flex-row items-stretch sm:items-center justify-between shadow-xs gap-2.5">
-              <div className="flex items-center gap-2.5">
-                <div className="h-7 w-7 rounded-lg bg-white/20 flex items-center justify-center text-white flex-shrink-0">
-                  <FacebookIcon />
+            {/* Smart 1-Click Meta Login Option & Auto-Discovery */}
+            <div className="bg-gradient-to-r from-blue-600 via-indigo-600 to-pink-600 p-0.5 rounded-2xl shadow-sm">
+              <div className="bg-white p-3.5 rounded-[14px] space-y-3">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5">
+                  <div className="flex items-center gap-2.5">
+                    <div className="h-8 w-8 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white shrink-0 shadow-xs">
+                      <Sparkles className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                        1-Click Auto-Connect
+                        <span className="text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.2 rounded-full font-semibold">Easy</span>
+                      </h4>
+                      <p className="text-[11px] text-slate-500">Auto-detect Facebook Page ID, Instagram ID & Tokens</p>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    disabled={isAutoImporting}
+                    onClick={handleMetaOAuthLogin}
+                    className="w-full sm:w-auto px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer shadow-xs disabled:opacity-50"
+                  >
+                    <FacebookIcon className="!w-3.5 !h-3.5" />
+                    {isAutoImporting ? "Connecting..." : "Login with Facebook"}
+                  </button>
                 </div>
-                <div>
-                  <h4 className="text-xs font-bold">1-Click Meta Authorization</h4>
-                  <p className="text-[10px] text-blue-100">Authorize page without manual token typing</p>
+
+                {/* Quick Token Paste & Auto-Fetch fallback */}
+                <div className="pt-2 border-t border-slate-100">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={autoTokenInput}
+                      onChange={(e) => setAutoTokenInput(e.target.value)}
+                      placeholder="Or paste any Meta / Graph Token to auto-fetch..."
+                      className="flex-1 bg-slate-50 border border-slate-200 text-xs text-slate-800 rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-blue-500 font-mono"
+                    />
+                    <button
+                      type="button"
+                      disabled={isAutoImporting || !autoTokenInput.trim()}
+                      onClick={() => triggerAutoDiscovery(autoTokenInput)}
+                      className="px-3 py-1.5 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-lg transition cursor-pointer disabled:opacity-40 shrink-0"
+                    >
+                      {isAutoImporting ? "Fetching..." : "Auto-Fetch"}
+                    </button>
+                  </div>
                 </div>
+
+                {/* Discovered Accounts Dropdown Selector if multiple found */}
+                {discoveredPages.length > 1 && (
+                  <div className="p-2.5 bg-blue-50 border border-blue-200 rounded-xl space-y-1.5 animate-fadeIn">
+                    <label className="text-[11px] font-bold text-blue-900 block">
+                      Choose which Page / Brand to configure:
+                    </label>
+                    <select
+                      className="w-full bg-white border border-blue-300 rounded-lg p-2 text-xs text-slate-900 font-medium"
+                      onChange={(e) => {
+                        const selected = discoveredPages.find((p) => p.fbPageId === e.target.value);
+                        if (selected) {
+                          setClientForm((prev) => ({
+                            ...prev,
+                            name: selected.fbPageName,
+                            platformType: selected.hasInstagram ? "both" : "facebook",
+                            fbPageName: selected.fbPageName,
+                            fbPageId: selected.fbPageId,
+                            fbPasswordOrToken: selected.fbToken,
+                            igUsername: selected.igUsername || "",
+                            igAccountId: selected.igAccountId || "",
+                            igPasswordOrToken: selected.igToken || selected.fbToken,
+                          }));
+                        }
+                      }}
+                    >
+                      {discoveredPages.map((page) => (
+                        <option key={page.fbPageId} value={page.fbPageId}>
+                          {page.fbPageName} {page.hasInstagram ? `(Linked IG: @${page.igUsername})` : "(FB Only)"}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
               </div>
-              <button
-                type="button"
-                onClick={() => {
-                  alert("Connecting to Meta OAuth login dialog... (Redirecting to Meta permissions)");
-                  setClientForm((prev) => ({
-                    ...prev,
-                    fbPageName: prev.name ? `${prev.name} Page (OAuth Verified)` : "Verified Meta Page",
-                    fbPageId: "1099" + Math.floor(100000 + Math.random() * 900000),
-                    fbPasswordOrToken: "EAAB_oauth_token_" + Date.now(),
-                    igUsername: prev.name ? prev.name.toLowerCase().replace(/\s+/g, "_") : "verified_brand",
-                    igAccountId: "178" + Math.floor(1000000 + Math.random() * 9000000),
-                  }));
-                  setVerificationFeedback("✅ Successfully authorized via Meta Login!");
-                }}
-                className="px-3 py-1.5 bg-white text-blue-700 hover:bg-blue-50 text-xs font-bold rounded-lg transition cursor-pointer text-center"
-              >
-                Connect with Facebook
-              </button>
             </div>
 
             <div className="space-y-4 pt-1">
