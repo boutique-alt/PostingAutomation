@@ -160,6 +160,17 @@ export default function SocialComposer() {
         connected: true,
       },
     },
+    {
+      id: "proj_pixel",
+      name: "Pixel Solution",
+      connectMode: "facebook",
+      facebook: {
+        pageName: "Pixel Solution",
+        pageId: "247835161754285",
+        accessToken: "EAANoLwr4qnMBSZBZBWBjZBEib6n0P751no38lRa2JNmtkWaZAsvoWrJidUtPOeYOMGcbGfsf22h833GUVepAGg3lzfJc2tdNCZCwxxMpwas0r8swEjBSrZBEbOhVfaAVTzrnOWtyQxeZA2V70J3VsyZCQf5y9tEzvA7XiY3caxWB79N8qxhQla6sCWEQCGZBlY0NOjbgZD",
+        connected: true,
+      },
+    },
   ]);
   const [isLoaded, setIsLoaded] = useState<boolean>(true);
 

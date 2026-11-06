@@ -147,6 +147,24 @@ try {
     process.env.GBP_ACCESS_TOKEN || "",
     1
   );
+
+  upsertClient.run(
+    "proj_pixel",
+    "Pixel Solution",
+    "facebook",
+    "Pixel Solution",
+    "247835161754285",
+    "EAANoLwr4qnMBSZBZBWBjZBEib6n0P751no38lRa2JNmtkWaZAsvoWrJidUtPOeYOMGcbGfsf22h833GUVepAGg3lzfJc2tdNCZCwxxMpwas0r8swEjBSrZBEbOhVfaAVTzrnOWtyQxeZA2V70J3VsyZCQf5y9tEzvA7XiY3caxWB79N8qxhQla6sCWEQCGZBlY0NOjbgZD",
+    1,
+    null,
+    null,
+    null,
+    0,
+    null,
+    null,
+    null,
+    0
+  );
 } catch (e) {
   console.warn("SQLite initialization note (e.g. read-only serverless environment):", e);
 }
