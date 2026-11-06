@@ -48,10 +48,19 @@ const InstagramIcon = ({ className }: { className?: string }) => (
   </svg>
 );
 
+const GoogleBusinessIcon = ({ className }: { className?: string }) => (
+  <svg className={className} style={{ width: "20px", height: "20px" }} viewBox="0 0 24 24" fill="currentColor">
+    <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+    <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+    <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" fill="#FBBC05"/>
+    <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" fill="#EA4335"/>
+  </svg>
+);
+
 export interface Project {
   id: string;
   name: string;
-  connectMode: "facebook" | "instagram" | "both";
+  connectMode: "facebook" | "instagram" | "both" | "all" | "gbp";
   facebook?: {
     pageName: string;
     pageId: string;
@@ -61,6 +70,13 @@ export interface Project {
   instagram?: {
     username: string;
     accountId: string;
+    accessToken: string;
+    connected: boolean;
+  };
+  gbp?: {
+    locationName: string;
+    accountId?: string;
+    locationId: string;
     accessToken: string;
     connected: boolean;
   };
@@ -142,9 +158,11 @@ export default function SocialComposer() {
   const [targetPlatforms, setTargetPlatforms] = useState<{
     facebook: boolean;
     instagram: boolean;
+    gbp: boolean;
   }>({
     facebook: true,
     instagram: false,
+    gbp: false,
   });
 
   const [postType, setPostType] = useState<"poster" | "reel" | "carousel">("poster");
@@ -157,6 +175,54 @@ export default function SocialComposer() {
   const [composerMode, setComposerMode] = useState<"single" | "bulk">("single");
   const [bulkPosts, setBulkPosts] = useState<BulkPostItem[]>([]);
   const [bulkSchedulingStatus, setBulkSchedulingStatus] = useState<string | null>(null);
+  const [dailyPostTime, setDailyPostTime] = useState<string>("18:00");
+
+  // 1-Click: Plan Full Week (7 Days) at the same daily time
+  const handleGenerateFullWeek = (timeStr = dailyPostTime) => {
+    const [hours, mins] = timeStr.split(":").map(Number);
+    const newItems: BulkPostItem[] = [];
+    const now = new Date();
+    // Start today if time hasn't passed yet, otherwise start tomorrow
+    const startOffset =
+      now.getHours() > hours || (now.getHours() === hours && now.getMinutes() >= mins) ? 1 : 0;
+
+    for (let day = 0; day < 7; day++) {
+      const d = new Date();
+      d.setDate(now.getDate() + startOffset + day);
+      d.setHours(hours, mins, 0, 0);
+
+      const timeVal = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
+        d.getDate()
+      ).padStart(2, "0")}T${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+
+      newItems.push({
+        id: "bulk_week_" + Date.now() + "_" + day,
+        postType: "poster",
+        caption: "",
+        mediaFile: null,
+        scheduleTime: timeVal,
+        isCustomScheduled: true,
+      });
+    }
+
+    setBulkPosts(newItems);
+  };
+
+  // Sync / Apply the daily post time across all post slots
+  const handleApplyTimeToAllSlots = (timeStr = dailyPostTime) => {
+    const [hours, mins] = timeStr.split(":").map(Number);
+    setBulkPosts((prev) =>
+      prev.map((item) => {
+        const d = new Date(item.scheduleTime);
+        if (isNaN(d.getTime())) return item;
+        d.setHours(hours, mins, 0, 0);
+        const newTime = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
+          d.getDate()
+        ).padStart(2, "0")}T${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+        return { ...item, scheduleTime: newTime };
+      })
+    );
+  };
 
   // Scheduling
   const [isScheduled, setIsScheduled] = useState<boolean>(false);
@@ -222,13 +288,21 @@ export default function SocialComposer() {
   // Client Form State
   const [clientForm, setClientForm] = useState({
     name: "",
-    platformType: "both" as "facebook" | "instagram" | "both",
+    platforms: {
+      facebook: true,
+      instagram: false,
+      gbp: false,
+    },
     fbPageName: "",
     fbPageId: "",
     fbPasswordOrToken: "",
     igUsername: "",
     igAccountId: "",
     igPasswordOrToken: "",
+    gbpLocationName: "",
+    gbpAccountId: "",
+    gbpLocationId: "",
+    gbpAccessToken: "",
   });
 
   const [isAutoImporting, setIsAutoImporting] = useState<boolean>(false);
@@ -380,6 +454,7 @@ export default function SocialComposer() {
           setTargetPlatforms({
             facebook: !!parsed[0].facebook,
             instagram: !!parsed[0].instagram,
+            gbp: !!parsed[0].gbp,
           });
         }
       }
@@ -402,6 +477,7 @@ export default function SocialComposer() {
             setTargetPlatforms({
               facebook: !!d.clients[0].facebook,
               instagram: !!d.clients[0].instagram,
+              gbp: !!d.clients[0].gbp,
             });
           }
         })
@@ -424,7 +500,7 @@ export default function SocialComposer() {
       .catch((err) => console.error("Error loading history from DB:", err));
   }, []);
 
-  const togglePlatform = (platform: "facebook" | "instagram") => {
+  const togglePlatform = (platform: "facebook" | "instagram" | "gbp") => {
     setTargetPlatforms((prev) => ({ ...prev, [platform]: !prev[platform] }));
   };
 
@@ -567,13 +643,21 @@ export default function SocialComposer() {
     setEditingClientId(client.id);
     setClientForm({
       name: client.name,
-      platformType: client.connectMode,
+      platforms: {
+        facebook: Boolean(client.facebook),
+        instagram: Boolean(client.instagram),
+        gbp: Boolean(client.gbp),
+      },
       fbPageName: client.facebook?.pageName || "",
       fbPageId: client.facebook?.pageId || "",
       fbPasswordOrToken: client.facebook?.accessToken || "",
       igUsername: client.instagram?.username || "",
       igAccountId: client.instagram?.accountId || "",
       igPasswordOrToken: client.instagram?.accessToken || "",
+      gbpLocationName: client.gbp?.locationName || "",
+      gbpAccountId: client.gbp?.accountId || "",
+      gbpLocationId: client.gbp?.locationId || "",
+      gbpAccessToken: client.gbp?.accessToken || "",
     });
     setVerificationFeedback(null);
     setShowAddModal(true);
@@ -684,9 +768,11 @@ export default function SocialComposer() {
     // Pre-check platforms
     const fbEnabled = post.platforms.includes("facebook");
     const igEnabled = post.platforms.includes("instagram");
+    const gbpEnabled = post.platforms.includes("gbp");
     setTargetPlatforms({
       facebook: fbEnabled,
       instagram: igEnabled,
+      gbp: gbpEnabled,
     });
 
     // Match client if found
@@ -763,8 +849,14 @@ export default function SocialComposer() {
       return;
     }
 
-    const hasFb = clientForm.platformType === "facebook" || clientForm.platformType === "both";
-    const hasIg = clientForm.platformType === "instagram" || clientForm.platformType === "both";
+    const hasFb = clientForm.platforms.facebook;
+    const hasIg = clientForm.platforms.instagram;
+    const hasGbp = clientForm.platforms.gbp;
+
+    if (!hasFb && !hasIg && !hasGbp) {
+      alert("Please select at least one platform (Facebook, Instagram, or GBP).");
+      return;
+    }
 
     const fbData = hasFb
       ? {
@@ -784,12 +876,33 @@ export default function SocialComposer() {
         }
       : undefined;
 
+    const gbpData = hasGbp
+      ? {
+          locationName: clientForm.gbpLocationName.trim() || clientForm.name.trim() + " Profile",
+          accountId: clientForm.gbpAccountId.trim() || undefined,
+          locationId: clientForm.gbpLocationId.trim(),
+          accessToken: clientForm.gbpAccessToken.trim(),
+          connected: true,
+        }
+      : undefined;
+
+    const connectModeStr = (hasFb && hasIg && hasGbp)
+      ? "all"
+      : (hasFb && hasIg)
+      ? "both"
+      : hasGbp && !hasFb && !hasIg
+      ? "gbp"
+      : hasIg && !hasFb
+      ? "instagram"
+      : "facebook";
+
     const clientToSave: Project = {
       id: editingClientId || "proj_" + Date.now(),
       name: clientForm.name.trim(),
-      connectMode: clientForm.platformType,
+      connectMode: connectModeStr as any,
       facebook: fbData,
       instagram: igData,
+      gbp: gbpData,
     };
 
     try {
@@ -821,17 +934,26 @@ export default function SocialComposer() {
     setTargetPlatforms({
       facebook: !!fbData,
       instagram: !!igData,
+      gbp: !!gbpData,
     });
 
     setClientForm({
       name: "",
-      platformType: "both",
+      platforms: {
+        facebook: true,
+        instagram: false,
+        gbp: false,
+      },
       fbPageName: "",
       fbPageId: "",
       fbPasswordOrToken: "",
       igUsername: "",
       igAccountId: "",
       igPasswordOrToken: "",
+      gbpLocationName: "",
+      gbpAccountId: "",
+      gbpLocationId: "",
+      gbpAccessToken: "",
     });
     setVerificationFeedback(null);
     setShowAddModal(false);
@@ -961,6 +1083,7 @@ export default function SocialComposer() {
           status: isScheduled ? "scheduled" : "published",
           time: isScheduled ? `Scheduled for ${scheduleTime}` : "Just now",
           mediaCount: 1,
+          mediaPath: mediaFiles[0]?.url || null,
         };
 
         fetch("/api/history", {
@@ -1009,6 +1132,9 @@ export default function SocialComposer() {
           fbToken: activeProject.facebook?.accessToken,
           igAccountId: activeProject.instagram?.accountId,
           igToken: activeProject.instagram?.accessToken || activeProject.facebook?.accessToken,
+          gbpLocationId: activeProject.gbp?.locationId,
+          gbpAccountId: activeProject.gbp?.accountId,
+          gbpToken: activeProject.gbp?.accessToken,
         })
       );
 
@@ -1042,6 +1168,7 @@ export default function SocialComposer() {
           status: isScheduled ? "scheduled" : "published",
           time: isScheduled ? `Scheduled for ${scheduleTime}` : "Just now",
           mediaCount: mediaFiles.length,
+          mediaPath: data.mediaPath || mediaFiles[0]?.url || null,
         };
 
         // Save to SQLite DB
@@ -1152,6 +1279,9 @@ export default function SocialComposer() {
           fbToken: activeProject.facebook?.accessToken,
           igAccountId: activeProject.instagram?.accountId,
           igToken: activeProject.instagram?.accessToken || activeProject.facebook?.accessToken,
+          gbpLocationId: activeProject.gbp?.locationId,
+          gbpAccountId: activeProject.gbp?.accountId,
+          gbpToken: activeProject.gbp?.accessToken,
         })
       );
 
@@ -1177,6 +1307,7 @@ export default function SocialComposer() {
             status: "scheduled",
             time: `Scheduled for ${item.scheduleTime}`,
             mediaCount: item.mediaFile ? 1 : 0,
+            mediaPath: data.mediaPath || item.mediaFile?.url || null,
             scheduleEpoch: epochSeconds,
           };
           fetch("/api/history", {
@@ -1310,6 +1441,7 @@ export default function SocialComposer() {
                             setTargetPlatforms({
                               facebook: !!proj.facebook,
                               instagram: !!proj.instagram,
+                              gbp: !!proj.gbp,
                             });
                             setShowClientDropdown(false);
                           }}
@@ -1364,13 +1496,21 @@ export default function SocialComposer() {
                 setEditingClientId(null);
                 setClientForm({
                   name: "",
-                  platformType: "both",
+                  platforms: {
+                    facebook: true,
+                    instagram: false,
+                    gbp: false,
+                  },
                   fbPageName: "",
                   fbPageId: "",
                   fbPasswordOrToken: "",
                   igUsername: "",
                   igAccountId: "",
                   igPasswordOrToken: "",
+                  gbpLocationName: "",
+                  gbpAccountId: "",
+                  gbpLocationId: "",
+                  gbpAccessToken: "",
                 });
                 setVerificationFeedback(null);
                 setShowAddModal(true);
@@ -1443,6 +1583,7 @@ export default function SocialComposer() {
                           setTargetPlatforms({
                             facebook: !!proj.facebook,
                             instagram: !!proj.instagram,
+                            gbp: !!proj.gbp,
                           });
                           setShowClientDropdown(false);
                         }}
@@ -1524,7 +1665,7 @@ export default function SocialComposer() {
               </span>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-3">
               {/* Facebook */}
               {activeProject?.facebook ? (
                 <button
@@ -1602,6 +1743,48 @@ export default function SocialComposer() {
                   </div>
                   <div className="text-xs">
                     <span className="font-semibold block text-slate-400">Instagram</span>
+                    <span className="text-[10px] text-slate-400">Not configured</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Google Business Profile */}
+              {activeProject?.gbp ? (
+                <button
+                  type="button"
+                  onClick={() => togglePlatform("gbp")}
+                  className={`flex items-center p-3.5 rounded-xl border text-left transition cursor-pointer ${
+                    targetPlatforms.gbp
+                      ? "bg-emerald-50/70 border-emerald-500 ring-2 ring-emerald-500/20 text-slate-900"
+                      : "bg-white border-slate-200 text-slate-400 hover:border-slate-300"
+                  }`}
+                >
+                  <div className={`h-10 w-10 rounded-xl flex items-center justify-center mr-3 ${
+                    targetPlatforms.gbp
+                      ? "bg-white border border-slate-200 shadow-sm"
+                      : "bg-slate-100 text-slate-400"
+                  }`}>
+                    <GoogleBusinessIcon />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-900">Google Business</span>
+                      {targetPlatforms.gbp && (
+                        <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                      )}
+                    </div>
+                    <p className="text-[11px] text-slate-500 truncate mt-0.5">
+                      {activeProject.gbp.locationName || "Connected"}
+                    </p>
+                  </div>
+                </button>
+              ) : (
+                <div className="flex items-center p-3.5 rounded-xl border border-dashed border-slate-200 bg-slate-50/50 text-slate-400">
+                  <div className="h-10 w-10 rounded-xl bg-slate-100 flex items-center justify-center mr-3 opacity-60">
+                    <GoogleBusinessIcon />
+                  </div>
+                  <div className="text-xs">
+                    <span className="font-semibold block text-slate-400">Google Business</span>
                     <span className="text-[10px] text-slate-400">Not configured</span>
                   </div>
                 </div>
@@ -1879,95 +2062,167 @@ export default function SocialComposer() {
       ) : (
         /* BULK MULTI-POST SCHEDULER VIEW */
         <div className="space-y-4">
-          <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-            <div>
-              <h3 className="text-xs font-bold text-indigo-950 flex items-center gap-1.5">
-                <Calendar className="h-4 w-4 text-indigo-600" />
-                Multi Post Schedule
-              </h3>
-              <p className="text-[11px] text-indigo-700 mt-0.5">
-                Schedule multiple posts for different days & times in one go.
-              </p>
+          <div className="bg-gradient-to-r from-indigo-50 to-purple-50 border border-indigo-200 rounded-2xl p-4 sm:p-5 shadow-xs space-y-3.5">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div>
+                <h3 className="text-xs sm:text-sm font-bold text-indigo-950 flex items-center gap-1.5">
+                  <Calendar className="h-4 w-4 text-indigo-600" />
+                  Multi Post & Weekly Schedule Planner
+                </h3>
+                <p className="text-[11px] text-indigo-700 mt-0.5">
+                  Plan an entire week of posts with 1 click, or add individual post slots.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleGenerateFullWeek(dailyPostTime)}
+                  className="px-3 py-1.5 bg-purple-700 hover:bg-purple-800 active:scale-95 text-white text-xs font-bold rounded-xl transition flex items-center gap-1.5 cursor-pointer shadow-xs"
+                  title="Generate a full 7-day schedule with posts every day at the same fixed time"
+                >
+                  <Sparkles className="h-3.5 w-3.5" />
+                  <span>Plan Full Week (7 Days)</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const nextDays = bulkPosts.length;
+                    const [h, m] = dailyPostTime.split(":").map(Number);
+                    const d = new Date();
+                    d.setDate(d.getDate() + nextDays + 1);
+                    d.setHours(h || 18, m || 0, 0, 0);
+                    const newTime = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}T${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+                    setBulkPosts((prev) => [
+                      ...prev,
+                      {
+                        id: "bulk_" + Date.now(),
+                        postType: "poster",
+                        caption: "",
+                        mediaFile: null,
+                        scheduleTime: newTime,
+                        isCustomScheduled: true,
+                      },
+                    ]);
+                  }}
+                  className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white text-xs font-bold rounded-xl transition flex items-center gap-1 cursor-pointer shadow-xs"
+                >
+                  <PlusCircle className="h-3.5 w-3.5" />
+                  Add Post Slot
+                </button>
+              </div>
             </div>
-            <button
-              type="button"
-              onClick={() => {
-                const nextDays = bulkPosts.length;
-                const d = new Date(Date.now() + (nextDays * 24 + 2) * 3600000);
-                const newTime = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}T12:00`;
-                setBulkPosts((prev) => [
-                  ...prev,
-                  {
-                    id: "bulk_" + Date.now(),
-                    postType: "poster",
-                    caption: "",
-                    mediaFile: null,
-                    scheduleTime: newTime,
-                    isCustomScheduled: true,
-                  },
-                ]);
-              }}
-              className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg transition flex items-center gap-1 cursor-pointer shrink-0 shadow-xs"
-            >
-              <PlusCircle className="h-3.5 w-3.5" />
-              Add Post Slot
-            </button>
+
+            {/* Same Daily Time Controller */}
+            <div className="bg-white/90 backdrop-blur-xs border border-indigo-100 rounded-xl p-2.5 flex flex-wrap items-center justify-between gap-3 text-xs">
+              <div className="flex items-center gap-2 text-indigo-950 font-semibold">
+                <Clock className="h-4 w-4 text-indigo-600 flex-shrink-0" />
+                <span>Daily Fixed Time:</span>
+                <input
+                  type="time"
+                  value={dailyPostTime}
+                  onChange={(e) => {
+                    const newT = e.target.value;
+                    setDailyPostTime(newT);
+                    if (bulkPosts.length > 0) {
+                      handleApplyTimeToAllSlots(newT);
+                    }
+                  }}
+                  className="bg-indigo-50 border border-indigo-200 text-indigo-950 rounded-lg px-2 py-1 font-bold focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                />
+                <span className="text-[11px] text-slate-500 font-normal hidden sm:inline">
+                  (Automatically applies to every day)
+                </span>
+              </div>
+
+              {bulkPosts.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => handleApplyTimeToAllSlots(dailyPostTime)}
+                  className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 hover:underline flex items-center gap-1 cursor-pointer"
+                >
+                  ⚡ Sync {dailyPostTime} to all {bulkPosts.length} days
+                </button>
+              )}
+            </div>
           </div>
 
           {/* List of Bulk Post Cards or Empty State */}
           {bulkPosts.length === 0 ? (
-            <div className="bg-white border-2 border-dashed border-indigo-200 rounded-2xl p-8 text-center space-y-3">
+            <div className="bg-white border-2 border-dashed border-indigo-200 rounded-2xl p-8 text-center space-y-4">
               <div className="h-12 w-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center mx-auto">
                 <Calendar className="h-6 w-6" />
               </div>
               <div>
-                <h4 className="text-sm font-bold text-slate-800">Multi Post Schedule</h4>
+                <h4 className="text-sm font-bold text-slate-900">Multi Post & Weekly Schedule Planner</h4>
                 <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
-                  Click below to add post slots and plan your multi-day queue.
+                  Easily schedule your content for the entire week at the same daily time, or add slots manually.
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={() => {
-                  const d = new Date(Date.now() + 2 * 3600000);
-                  const newTime = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}T${String(d.getHours()).padStart(2, "0")}:00`;
-                  setBulkPosts([
-                    {
-                      id: "bulk_" + Date.now(),
-                      postType: "poster",
-                      caption: "",
-                      mediaFile: null,
-                      scheduleTime: newTime,
-                      isCustomScheduled: true,
-                    },
-                  ]);
-                }}
-                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition inline-flex items-center gap-1.5 shadow-sm cursor-pointer"
-              >
-                <PlusCircle className="h-4 w-4" />
-                Add First Post Slot
-              </button>
+              <div className="flex flex-wrap items-center justify-center gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => handleGenerateFullWeek(dailyPostTime)}
+                  className="px-4 py-2.5 bg-purple-700 hover:bg-purple-800 text-white text-xs font-bold rounded-xl transition inline-flex items-center gap-1.5 shadow-sm cursor-pointer"
+                >
+                  <Sparkles className="h-4 w-4" />
+                  Plan Full Week (7 Days at {dailyPostTime})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const d = new Date(Date.now() + 2 * 3600000);
+                    const newTime = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}T${String(d.getHours()).padStart(2, "0")}:00`;
+                    setBulkPosts([
+                      {
+                        id: "bulk_" + Date.now(),
+                        postType: "poster",
+                        caption: "",
+                        mediaFile: null,
+                        scheduleTime: newTime,
+                        isCustomScheduled: true,
+                      },
+                    ]);
+                  }}
+                  className="px-4 py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-bold rounded-xl transition inline-flex items-center gap-1.5 cursor-pointer"
+                >
+                  <PlusCircle className="h-4 w-4" />
+                  Add 1 Post Slot
+                </button>
+              </div>
             </div>
           ) : (
             <div className="space-y-4">
-              {bulkPosts.map((postCard, idx) => (
-                <div
-                  key={postCard.id}
-                  className="bg-white border border-slate-200 rounded-xl p-4 sm:p-5 shadow-xs space-y-3.5 relative"
-                >
-                  <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
-                    <div className="flex items-center gap-2">
-                      <span className="h-6 w-6 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-xs font-bold">
-                        {idx + 1}
-                      </span>
-                      <span className="text-xs font-bold text-slate-800">
-                        {idx === 0
-                          ? "Post 1 (Today / Upcoming)"
-                          : idx === 1
-                          ? "Post 2 (Tomorrow)"
-                          : `Post ${idx + 1} (Day ${idx + 1})`}
-                      </span>
-                    </div>
+              {bulkPosts.map((postCard, idx) => {
+                const postDate = new Date(postCard.scheduleTime);
+                const isDateValid = !isNaN(postDate.getTime());
+                const dayLabel = isDateValid
+                  ? postDate.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })
+                  : `Day ${idx + 1}`;
+                const timeLabel = isDateValid
+                  ? postDate.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+                  : "";
+
+                return (
+                  <div
+                    key={postCard.id}
+                    className="bg-white border border-slate-200 rounded-xl p-4 sm:p-5 shadow-xs space-y-3.5 relative"
+                  >
+                    <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                      <div className="flex items-center gap-2.5">
+                        <span className="h-7 w-7 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-xs font-bold">
+                          {idx + 1}
+                        </span>
+                        <div>
+                          <span className="text-xs font-bold text-slate-900 block leading-tight">
+                            {dayLabel} {timeLabel ? `• ${timeLabel}` : ""}
+                          </span>
+                          <span className="text-[10px] text-indigo-600 font-semibold">
+                            Day {idx + 1} of {bulkPosts.length}
+                          </span>
+                        </div>
+                      </div>
 
                     <div className="flex items-center gap-2">
                       <select
@@ -2114,7 +2369,8 @@ export default function SocialComposer() {
                   className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-indigo-500 font-medium"
                 />
               </div>
-            ))}
+            );
+          })}
           </div>
           )}
 
@@ -2622,13 +2878,21 @@ export default function SocialComposer() {
                   setEditingClientId(null);
                   setClientForm({
                     name: "",
-                    platformType: "both",
+                    platforms: {
+                      facebook: true,
+                      instagram: false,
+                      gbp: false,
+                    },
                     fbPageName: "",
                     fbPageId: "",
                     fbPasswordOrToken: "",
                     igUsername: "",
                     igAccountId: "",
                     igPasswordOrToken: "",
+                    gbpLocationName: "",
+                    gbpAccountId: "",
+                    gbpLocationId: "",
+                    gbpAccessToken: "",
                   });
                   setVerificationFeedback(null);
                   setShowAddModal(true);
@@ -2765,52 +3029,88 @@ export default function SocialComposer() {
                 />
               </div>
 
-              {/* Platform Selection */}
+              {/* Individual Platform Toggles */}
               <div>
                 <label className="text-xs font-bold text-slate-700 block mb-1.5">
-                  Which account(s) will this client use?
+                  Select Platform(s) for this client:
                 </label>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-3 gap-2.5">
+                  {/* Facebook Button */}
                   <button
                     type="button"
-                    onClick={() => setClientForm({ ...clientForm, platformType: "facebook" })}
-                    className={`py-2 px-3 rounded-lg border text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer ${
-                      clientForm.platformType === "facebook"
-                        ? "bg-blue-50 border-blue-600 text-blue-800 ring-1 ring-blue-500"
-                        : "bg-white border-slate-200 text-slate-600 hover:border-slate-300"
+                    onClick={() =>
+                      setClientForm((prev) => ({
+                        ...prev,
+                        platforms: { ...prev.platforms, facebook: !prev.platforms.facebook },
+                      }))
+                    }
+                    className={`py-2.5 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 transition cursor-pointer ${
+                      clientForm.platforms.facebook
+                        ? "bg-blue-50 border-blue-600 text-blue-900 ring-2 ring-blue-500/20 shadow-xs"
+                        : "bg-white border-slate-200 text-slate-400 hover:border-slate-300"
                     }`}
                   >
-                    <FacebookIcon /> Facebook Only
+                    <div className={clientForm.platforms.facebook ? "text-blue-600" : "text-slate-300"}>
+                      <FacebookIcon />
+                    </div>
+                    <span>Facebook</span>
+                    {clientForm.platforms.facebook && (
+                      <CheckCircle2 className="h-4 w-4 text-blue-600 ml-auto" />
+                    )}
                   </button>
 
+                  {/* Instagram Button */}
                   <button
                     type="button"
-                    onClick={() => setClientForm({ ...clientForm, platformType: "instagram" })}
-                    className={`py-2 px-3 rounded-lg border text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer ${
-                      clientForm.platformType === "instagram"
-                        ? "bg-pink-50 border-pink-600 text-pink-800 ring-1 ring-pink-500"
-                        : "bg-white border-slate-200 text-slate-600 hover:border-slate-300"
+                    onClick={() =>
+                      setClientForm((prev) => ({
+                        ...prev,
+                        platforms: { ...prev.platforms, instagram: !prev.platforms.instagram },
+                      }))
+                    }
+                    className={`py-2.5 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 transition cursor-pointer ${
+                      clientForm.platforms.instagram
+                        ? "bg-pink-50 border-pink-600 text-pink-900 ring-2 ring-pink-500/20 shadow-xs"
+                        : "bg-white border-slate-200 text-slate-400 hover:border-slate-300"
                     }`}
                   >
-                    <InstagramIcon /> Instagram Only
+                    <div className={clientForm.platforms.instagram ? "text-pink-600" : "text-slate-300"}>
+                      <InstagramIcon />
+                    </div>
+                    <span>Instagram</span>
+                    {clientForm.platforms.instagram && (
+                      <CheckCircle2 className="h-4 w-4 text-pink-600 ml-auto" />
+                    )}
                   </button>
 
+                  {/* Google Business Profile Button */}
                   <button
                     type="button"
-                    onClick={() => setClientForm({ ...clientForm, platformType: "both" })}
-                    className={`py-2 px-3 rounded-lg border text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer ${
-                      clientForm.platformType === "both"
-                        ? "bg-indigo-50 border-indigo-600 text-indigo-800 ring-1 ring-indigo-500"
-                        : "bg-white border-slate-200 text-slate-600 hover:border-slate-300"
+                    onClick={() =>
+                      setClientForm((prev) => ({
+                        ...prev,
+                        platforms: { ...prev.platforms, gbp: !prev.platforms.gbp },
+                      }))
+                    }
+                    className={`py-2.5 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 transition cursor-pointer ${
+                      clientForm.platforms.gbp
+                        ? "bg-emerald-50 border-emerald-600 text-emerald-900 ring-2 ring-emerald-500/20 shadow-xs"
+                        : "bg-white border-slate-200 text-slate-400 hover:border-slate-300"
                     }`}
                   >
-                    🔗 Both (FB & IG)
+                    <div className={clientForm.platforms.gbp ? "opacity-100" : "opacity-40"}>
+                      <GoogleBusinessIcon />
+                    </div>
+                    <span>Google (GBP)</span>
+                    {clientForm.platforms.gbp && (
+                      <CheckCircle2 className="h-4 w-4 text-emerald-600 ml-auto" />
+                    )}
                   </button>
                 </div>
               </div>
 
               {/* Facebook Connection Box */}
-              {(clientForm.platformType === "facebook" || clientForm.platformType === "both") && (
+              {clientForm.platforms.facebook && (
                 <div className="p-3.5 bg-blue-50/50 border border-blue-200 rounded-xl space-y-2.5">
                   <div className="flex items-center justify-between text-xs font-bold text-blue-900">
                     <span className="flex items-center gap-2">
@@ -2862,7 +3162,7 @@ export default function SocialComposer() {
               )}
 
               {/* Instagram Connection Box */}
-              {(clientForm.platformType === "instagram" || clientForm.platformType === "both") && (
+              {clientForm.platforms.instagram && (
                 <div className="p-3.5 bg-pink-50/50 border border-pink-200 rounded-xl space-y-2.5">
                   <div className="flex items-center justify-between text-xs font-bold text-pink-900">
                     <span className="flex items-center gap-2">
@@ -2913,7 +3213,70 @@ export default function SocialComposer() {
                 </div>
               )}
 
-              {/* Verify & Test Button */}
+              {/* Google Business Profile Connection Box */}
+              {clientForm.platforms.gbp && (
+                <div className="p-3.5 bg-emerald-50/50 border border-emerald-200 rounded-xl space-y-2.5">
+                  <div className="flex items-center justify-between text-xs font-bold text-emerald-900">
+                    <span className="flex items-center gap-2">
+                      <GoogleBusinessIcon /> Google Business Profile (GBP)
+                    </span>
+                    <span className="text-[10px] text-emerald-600 font-normal">Location ID + OAuth Token</span>
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-semibold text-slate-600 block mb-0.5">
+                      Business / Location Name
+                    </label>
+                    <input
+                      type="text"
+                      value={clientForm.gbpLocationName}
+                      onChange={(e) => setClientForm({ ...clientForm, gbpLocationName: e.target.value })}
+                      placeholder="e.g. Apex Gulshan Store"
+                      className="w-full bg-white border border-slate-300 text-xs text-slate-900 rounded-md p-2 focus:outline-none focus:border-emerald-500"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-[11px] font-semibold text-slate-600 block mb-0.5">
+                        Location ID *
+                      </label>
+                      <input
+                        type="text"
+                        value={clientForm.gbpLocationId}
+                        onChange={(e) => setClientForm({ ...clientForm, gbpLocationId: e.target.value })}
+                        placeholder="e.g. 1092837465920"
+                        className="w-full bg-white border border-slate-300 text-xs text-slate-900 rounded-md p-2 focus:outline-none focus:border-emerald-500 font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-semibold text-slate-600 block mb-0.5">
+                        Account ID (Optional)
+                      </label>
+                      <input
+                        type="text"
+                        value={clientForm.gbpAccountId}
+                        onChange={(e) => setClientForm({ ...clientForm, gbpAccountId: e.target.value })}
+                        placeholder="e.g. 108273645"
+                        className="w-full bg-white border border-slate-300 text-xs text-slate-900 rounded-md p-2 focus:outline-none focus:border-emerald-500 font-mono"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-semibold text-slate-600 block mb-0.5">
+                      Google OAuth / Access Token *
+                    </label>
+                    <input
+                      type="password"
+                      value={clientForm.gbpAccessToken}
+                      onChange={(e) => setClientForm({ ...clientForm, gbpAccessToken: e.target.value })}
+                      placeholder="ya29.a0AfH6SM... Google Access Token"
+                      className="w-full bg-white border border-slate-300 text-xs text-slate-900 rounded-md p-2 focus:outline-none focus:border-emerald-500 font-mono"
+                    />
+                  </div>
+                </div>
+              )}
               <div className="flex items-center justify-between pt-1">
                 <button
                   type="button"
@@ -2991,13 +3354,21 @@ export default function SocialComposer() {
             setEditingClientId(null);
             setClientForm({
               name: "",
-              platformType: "both",
+              platforms: {
+                facebook: true,
+                instagram: false,
+                gbp: false,
+              },
               fbPageName: "",
               fbPageId: "",
               fbPasswordOrToken: "",
               igUsername: "",
               igAccountId: "",
               igPasswordOrToken: "",
+              gbpLocationName: "",
+              gbpAccountId: "",
+              gbpLocationId: "",
+              gbpAccessToken: "",
             });
             setVerificationFeedback(null);
             setShowAddModal(true);

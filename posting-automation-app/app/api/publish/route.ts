@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import fs from "fs";
+import path from "path";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60; // Allow up to 60s for video upload processing
@@ -47,6 +49,27 @@ export async function POST(req: Request) {
       isScheduled = body.isScheduled;
       scheduleTime = body.scheduleTime;
       clientCredentials = body.clientCredentials || {};
+    }
+
+    // Save uploaded media preview to public/uploads so scheduled post preview card displays the exact image/video
+    let savedMediaPath: string | null = null;
+    if (uploadFiles && uploadFiles.length > 0) {
+      try {
+        const file = uploadFiles[0];
+        const uploadsDir = path.join(process.cwd(), "public", "uploads");
+        if (!fs.existsSync(uploadsDir)) {
+          fs.mkdirSync(uploadsDir, { recursive: true });
+        }
+        const ext = path.extname(file.name) || (file.type.startsWith("video") ? ".mp4" : ".jpg");
+        const safeFilename = `media_${Date.now()}_${Math.random().toString(36).slice(2, 8)}${ext}`;
+        const filePath = path.join(uploadsDir, safeFilename);
+        const buffer = Buffer.from(await file.arrayBuffer());
+        fs.writeFileSync(filePath, buffer);
+        savedMediaPath = `/uploads/${safeFilename}`;
+        console.log("Saved local media preview to:", savedMediaPath);
+      } catch (saveErr) {
+        console.warn("Could not save media preview locally:", saveErr);
+      }
     }
 
     console.log("Publishing real post:", {
@@ -413,12 +436,154 @@ export async function POST(req: Request) {
       }
     }
 
+    // -------------------------------------------------------------
+    // 3. REAL GOOGLE BUSINESS PROFILE (GBP) POSTING
+    // -------------------------------------------------------------
+    if (platforms.includes("gbp")) {
+      const gbpLocationId = clientCredentials?.gbpLocationId || process.env.GBP_LOCATION_ID;
+      let gbpAccountId = clientCredentials?.gbpAccountId || process.env.GBP_ACCOUNT_ID;
+      const gbpToken = clientCredentials?.gbpToken || process.env.GBP_ACCESS_TOKEN;
+
+      if (!gbpLocationId || !gbpToken) {
+        errors.gbp = "GBP is missing Location ID or Access Token in client settings.";
+      } else {
+        try {
+          console.log("Publishing to Google Business Profile Location:", gbpLocationId);
+
+          // If gbpAccountId is missing, attempt auto-discovery via Google Account Management API
+          let discoveryError = "";
+          if (!gbpAccountId && gbpToken) {
+            try {
+              console.log("Auto-discovering Google Business Account ID with Access Token...");
+              const accRes = await fetch("https://mybusinessaccountmanagement.googleapis.com/v1/accounts", {
+                headers: { Authorization: `Bearer ${gbpToken}` },
+              });
+              const accText = await accRes.text();
+              console.log("Auto-discover GBP response:", accText);
+              try {
+                const accData = JSON.parse(accText);
+                if (accData.accounts && accData.accounts.length > 0) {
+                  // e.g. "accounts/11492348273492"
+                  gbpAccountId = accData.accounts[0].name.replace("accounts/", "");
+                  console.log("Successfully auto-discovered GBP Account ID:", gbpAccountId);
+                  
+                  // Save discovered account ID to DB for future use
+                  try {
+                    const db = (await import("@/lib/db")).default;
+                    db.prepare("UPDATE clients SET gbpAccountId = ? WHERE id = ?").run(gbpAccountId, projectId);
+                  } catch (e) {}
+                } else if (accData.error) {
+                  discoveryError = accData.error.message || JSON.stringify(accData.error);
+                }
+              } catch (e) {
+                discoveryError = accText.slice(0, 150);
+              }
+            } catch (accErr: any) {
+              console.warn("Could not auto-discover GBP account:", accErr);
+              discoveryError = accErr.message;
+            }
+          }
+
+          // Build Google Local Post Payload
+          // TopicType: STANDARD (What's New update)
+          const gbpPayload: any = {
+            languageCode: "en-US",
+            summary: caption || "Business Update",
+            topicType: "STANDARD",
+          };
+
+          // If image uploaded, host it via public CDN for Google Business Profile
+          if (uploadFiles.length > 0) {
+            let directMediaUrl = clientCredentials?.mediaPublicUrl;
+            if (!directMediaUrl) {
+              try {
+                const mediaFile = uploadFiles[0];
+                const uploadForm = new FormData();
+                uploadForm.append("file", mediaFile, mediaFile.name);
+                const cdnRes = await fetch("https://tmpfiles.org/api/v1/upload", {
+                  method: "POST",
+                  body: uploadForm,
+                });
+                const cdnData = await cdnRes.json();
+                if (cdnData.data?.url) {
+                  directMediaUrl = cdnData.data.url.replace("tmpfiles.org/", "tmpfiles.org/dl/");
+                  console.log("Hosted GBP image on public CDN:", directMediaUrl);
+                }
+              } catch (e) {
+                console.warn("Could not host image for GBP:", e);
+              }
+            }
+
+            if (directMediaUrl) {
+              gbpPayload.media = [
+                {
+                  mediaFormat: "PHOTO",
+                  sourceUrl: directMediaUrl,
+                },
+              ];
+            }
+          }
+
+          // Google Business Profile v4 API endpoint requires accounts/{accountId}/locations/{locationId}/localPosts
+          const cleanLocationId = gbpLocationId.replace(/^locations\//, "");
+          const cleanAccountId = gbpAccountId ? gbpAccountId.replace(/^accounts\//, "") : null;
+
+          if (!cleanAccountId) {
+            const extra = discoveryError ? ` (Google API reported: ${discoveryError})` : "";
+            throw new Error(
+              `Google Business Profile API requires your Google Account ID. Auto-discovery could not retrieve it${extra}. Please verify your GBP Access Token has the 'business.manage' scope.`
+            );
+          }
+
+          const gbpUrl = `https://mybusiness.googleapis.com/v4/accounts/${cleanAccountId}/locations/${cleanLocationId}/localPosts`;
+          console.log("Sending GBP Local Post request to:", gbpUrl);
+
+          const gbpRes = await fetch(gbpUrl, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${gbpToken}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(gbpPayload),
+          });
+
+          const rawGbpText = await gbpRes.text();
+          let gbpData: any = {};
+          try {
+            gbpData = JSON.parse(rawGbpText);
+          } catch (parseErr) {
+            console.error("Non-JSON GBP response:", rawGbpText.slice(0, 300));
+            throw new Error(
+              `Google API returned unexpected response (${gbpRes.status}). Verify your Account ID, Location ID, and that Google My Business API is enabled.`
+            );
+          }
+
+          if (!gbpRes.ok || gbpData.error) {
+            console.error("GBP Publish Error response:", gbpData.error || rawGbpText);
+            throw new Error(gbpData.error?.message || `Google API error (${gbpRes.status})`);
+          }
+
+          console.log("GBP Post Successful! ID:", gbpData.name || gbpData.searchUrl);
+          results.gbp = {
+            status: "published",
+            postId: gbpData.name || "published",
+            data: gbpData,
+            message: "Published successfully to Google Business Profile!",
+          };
+        } catch (err: any) {
+          console.error("GBP API Error:", err.message);
+          errors.gbp = err.message;
+        }
+      }
+    }
+
     const hasErrors = Object.keys(errors).length > 0;
 
     return NextResponse.json({
       success: !hasErrors,
       status: isScheduled ? "scheduled" : hasErrors ? "failed" : "published",
       results,
+      mediaPath: savedMediaPath,
       errors: hasErrors ? errors : undefined,
       message: hasErrors
         ? `Error publishing: ${Object.values(errors).join(", ")}`

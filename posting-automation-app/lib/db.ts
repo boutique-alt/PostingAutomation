@@ -35,6 +35,11 @@ try {
       igAccountId TEXT,
       igAccessToken TEXT,
       igConnected INTEGER DEFAULT 0,
+      gbpLocationName TEXT,
+      gbpAccountId TEXT,
+      gbpLocationId TEXT,
+      gbpAccessToken TEXT,
+      gbpConnected INTEGER DEFAULT 0,
       createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
@@ -54,6 +59,29 @@ try {
       createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
     );
   `);
+
+  // Run safe migrations for existing tables if columns don't exist
+  try {
+    const tableInfo = db.prepare("PRAGMA table_info(clients)").all() as any[];
+    const columnNames = tableInfo.map((c: any) => c.name);
+    if (!columnNames.includes("gbpLocationName")) {
+      db.exec("ALTER TABLE clients ADD COLUMN gbpLocationName TEXT;");
+    }
+    if (!columnNames.includes("gbpAccountId")) {
+      db.exec("ALTER TABLE clients ADD COLUMN gbpAccountId TEXT;");
+    }
+    if (!columnNames.includes("gbpLocationId")) {
+      db.exec("ALTER TABLE clients ADD COLUMN gbpLocationId TEXT;");
+    }
+    if (!columnNames.includes("gbpAccessToken")) {
+      db.exec("ALTER TABLE clients ADD COLUMN gbpAccessToken TEXT;");
+    }
+    if (!columnNames.includes("gbpConnected")) {
+      db.exec("ALTER TABLE clients ADD COLUMN gbpConnected INTEGER DEFAULT 0;");
+    }
+  } catch (migErr) {
+    console.warn("Migration notice:", migErr);
+  }
 
   // Auto-seed default Ronit lifestyle & Hasibul if empty so they are always ready immediately
   const countRow = db.prepare("SELECT COUNT(*) as cnt FROM clients").get() as { cnt: number };
@@ -114,6 +142,23 @@ try {
       "17841439096613191",
       "EAA7rTrq82k4BS5AP2gyzC4XZCmZCMSGyogTyZCMYUNZBMgZB4uQzTZB89WmHX8ayqYpc4zofdZBzwsOG60lkA4R1Mk4vxOGNKml9Ungtj0ZBNZAmtCSXqYqkfZAVxZAzm6njTLJuNvT9ihwzSg2POPzrmk4LDlGygCDa9KnZCi6z4K0aGjqo5BDkdw4ZBOI6D9Vk7pudzHAVyRlnK",
       1
+    );
+
+    // Ensure Boutique Fashion (Google Business Profile) is always present
+    const updateBoutique = db.prepare(`
+      INSERT OR REPLACE INTO clients (
+        id, name, connectMode,
+        gbpLocationName, gbpLocationId, gbpAccessToken, gbpConnected
+      )
+      VALUES (?, ?, ?, ?, ?, ?, 1)
+    `);
+    updateBoutique.run(
+      "proj_boutique",
+      "Boutique Fashion",
+      "gbp",
+      "Boutique Fashion",
+      "2766843255278767272",
+      process.env.GBP_ACCESS_TOKEN || ""
     );
   }
 } catch (e) {

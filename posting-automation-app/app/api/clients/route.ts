@@ -29,6 +29,15 @@ export async function GET() {
             connected: Boolean(row.igConnected),
           }
         : undefined,
+      gbp: row.gbpLocationName || row.gbpLocationId
+        ? {
+            locationName: row.gbpLocationName,
+            accountId: row.gbpAccountId,
+            locationId: row.gbpLocationId,
+            accessToken: row.gbpAccessToken,
+            connected: Boolean(row.gbpConnected),
+          }
+        : undefined,
     }));
 
     return NextResponse.json({ success: true, clients });
@@ -50,8 +59,9 @@ export async function POST(req: Request) {
       INSERT OR REPLACE INTO clients (
         id, name, connectMode,
         fbPageName, fbPageId, fbAccessToken, fbConnected,
-        igUsername, igAccountId, igAccessToken, igConnected
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        igUsername, igAccountId, igAccessToken, igConnected,
+        gbpLocationName, gbpAccountId, gbpLocationId, gbpAccessToken, gbpConnected
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     insert.run(
@@ -65,7 +75,12 @@ export async function POST(req: Request) {
       data.instagram?.username || null,
       data.instagram?.accountId || null,
       data.instagram?.accessToken || null,
-      data.instagram?.connected ? 1 : 0
+      data.instagram?.connected ? 1 : 0,
+      data.gbp?.locationName || null,
+      data.gbp?.accountId || null,
+      data.gbp?.locationId || null,
+      data.gbp?.accessToken || null,
+      data.gbp?.connected ? 1 : 0
     );
 
     return NextResponse.json({ success: true, id });

@@ -99,29 +99,72 @@ export async function GET(req: NextRequest) {
       } catch (fbErr) {
         console.error("Live Facebook fetch error:", fbErr);
       }
+
+      // 3.1 Fetch REAL Scheduled Posts directly from Facebook Page Graph API (includes real full_picture image preview!)
+      try {
+        const fbSchedUrl = `https://graph.facebook.com/v21.0/${fbPageId}/scheduled_posts?fields=id,message,created_time,scheduled_publish_time,permalink_url,full_picture&limit=15&access_token=${fbToken}`;
+        const fbSchedRes = await fetch(fbSchedUrl, { cache: "no-store" });
+        const fbSchedData = await fbSchedRes.json();
+        console.log("Facebook Live Scheduled Posts fetched from Meta:", fbSchedData?.data?.length || 0);
+
+        if (fbSchedData.data && Array.isArray(fbSchedData.data)) {
+          for (const item of fbSchedData.data) {
+            const schedEpoch = item.scheduled_publish_time ? item.scheduled_publish_time * 1000 : Date.now();
+            const schedDateStr = `Scheduled for ${new Date(schedEpoch).toLocaleDateString("en-US", { month: "short", day: "numeric" })} ${new Date(schedEpoch).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
+
+            liveItems.push({
+              id: "fb_sched_" + item.id,
+              originalId: item.id,
+              platform: "facebook",
+              projectName: client?.name || "Hasibul",
+              postType: item.full_picture ? "poster" : "text",
+              caption: item.message || "",
+              mediaUrl: item.full_picture || null,
+              isVideo: false,
+              permalink: item.permalink_url,
+              time: schedDateStr,
+              timestamp: schedEpoch,
+              likes: 0,
+              comments: 0,
+              shares: 0,
+              views: 0,
+              status: "scheduled",
+            });
+          }
+        }
+      } catch (fbSchedErr) {
+        console.error("Live Facebook Scheduled Posts fetch error:", fbSchedErr);
+      }
     }
 
     // 4. Also fetch Scheduled Queue from local SQLite DB so scheduled posts show alongside live ones!
     try {
       const scheduledRows = db.prepare("SELECT * FROM posts WHERE status = 'scheduled' ORDER BY createdAt DESC").all() as any[];
       for (const s of scheduledRows) {
-        liveItems.unshift({
-          id: s.id,
-          originalId: s.id,
-          platform: (JSON.parse(s.platforms || "[]")[0] || "facebook"),
-          projectName: s.projectName,
-          postType: s.postType,
-          caption: s.caption,
-          mediaUrl: s.mediaPath || null,
-          isVideo: s.postType === "reel",
-          permalink: null,
-          time: s.time,
-          timestamp: s.scheduleEpoch ? s.scheduleEpoch * 1000 : Date.now(),
-          likes: 0,
-          comments: 0,
-          views: 0,
-          status: "scheduled",
-        });
+        // Only add if not already present from live Facebook scheduled_posts
+        const alreadyInFeed = liveItems.some(
+          (item) => item.status === "scheduled" && (item.caption === s.caption || item.originalId === s.id)
+        );
+
+        if (!alreadyInFeed) {
+          liveItems.unshift({
+            id: s.id,
+            originalId: s.id,
+            platform: (JSON.parse(s.platforms || "[]")[0] || "facebook"),
+            projectName: s.projectName,
+            postType: s.postType,
+            caption: s.caption,
+            mediaUrl: s.mediaPath || null,
+            isVideo: s.postType === "reel",
+            permalink: null,
+            time: s.time,
+            timestamp: s.scheduleEpoch ? s.scheduleEpoch * 1000 : Date.now(),
+            likes: 0,
+            comments: 0,
+            views: 0,
+            status: "scheduled",
+          });
+        }
       }
     } catch (e) {}
 
