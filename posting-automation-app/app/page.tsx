@@ -93,7 +93,7 @@ export interface PostHistoryItem {
   errorMessage?: string;
   time: string;
   mediaCount: number;
-  mediaPath?: string;
+  mediaPath?: string | null;
   scheduleEpoch?: number;
 }
 
