@@ -167,7 +167,7 @@ export default function SocialComposer() {
       facebook: {
         pageName: "Pixel Solution",
         pageId: "247835161754285",
-        accessToken: "EAANoLwr4qnMBSZBZBWBjZBEib6n0P751no38lRa2JNmtkWaZAsvoWrJidUtPOeYOMGcbGfsf22h833GUVepAGg3lzfJc2tdNCZCwxxMpwas0r8swEjBSrZBEbOhVfaAVTzrnOWtyQxeZA2V70J3VsyZCQf5y9tEzvA7XiY3caxWB79N8qxhQla6sCWEQCGZBlY0NOjbgZD",
+        accessToken: "EAANoLwr4qnMBS5SakYKiwCLX9xGJ5tANZCDd43wfz40rEBZANycZBtCe53ZCiUvWMdTQ4VMNjS72xSrZAvtVNjZBBvl1yaOA5iKyYZCCDzLsQJZCVTmfZA4yO7Kb45IbpB0mRjO9X8ZAFJSsNTUmQOn5sBf3lVueaM4ZC1MCZC4y49oXWjY7ic6A0XnRi5bycnnfKyTZAtruX2QcZD",
         connected: true,
       },
     },
