@@ -1233,8 +1233,8 @@ export default function SocialComposer() {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col font-sans">
       {/* Top Header */}
-      <header className="border-b border-slate-200 bg-white sticky top-0 z-30 px-3 sm:px-6 py-3 flex flex-col sm:flex-row items-stretch sm:items-center justify-between shadow-xs gap-3">
-        <div className="flex items-center justify-between sm:justify-start gap-3">
+      <header className="border-b border-slate-200 bg-white sticky top-0 z-30 px-3 sm:px-6 py-2.5 sm:py-3 shadow-xs">
+        <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2.5">
             <div className="h-9 w-9 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-sm flex-shrink-0">
               <Share2 className="h-5 w-5" />
@@ -1249,52 +1249,184 @@ export default function SocialComposer() {
               <p className="text-[11px] sm:text-xs text-slate-500">Auto aspect-ratio validator & 1-click publishing</p>
             </div>
           </div>
+
+          {/* Desktop Only: Project Selector & Actions in Header */}
+          <div className="hidden sm:flex flex-wrap items-center gap-2">
+            {/* Custom Client Selector with Rich Real Platform Icons */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setShowClientDropdown((prev) => !prev)}
+                className="flex items-center bg-slate-100 hover:bg-slate-200/80 border border-slate-200 rounded-lg px-2.5 py-1.5 gap-2 transition cursor-pointer min-w-[170px]"
+              >
+                <span className="text-[11px] sm:text-xs text-slate-500 font-medium">Client:</span>
+
+                {activeProject ? (
+                  <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                    <span className="text-xs font-bold text-slate-900 truncate">
+                      {activeProject.name}
+                    </span>
+                    <div className="flex items-center gap-1 ml-auto flex-shrink-0">
+                      {activeProject.facebook && (
+                        <span className="text-blue-600 inline-flex items-center" title="Facebook Page Connected">
+                          <FacebookIcon className="!w-4 !h-4" />
+                        </span>
+                      )}
+                      {activeProject.instagram && (
+                        <span className="text-pink-600 inline-flex items-center" title="Instagram Connected">
+                          <InstagramIcon className="!w-4 !h-4" />
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <span className="text-xs text-slate-400 font-medium">No Client</span>
+                )}
+                <span className="text-[10px] text-slate-400">▼</span>
+              </button>
+
+              {/* Dropdown Menu */}
+              {showClientDropdown && (
+                <>
+                  <div
+                    className="fixed inset-0 z-40"
+                    onClick={() => setShowClientDropdown(false)}
+                  />
+                  <div className="absolute left-0 mt-1.5 w-60 bg-white border border-slate-200 rounded-xl shadow-xl z-50 py-1.5 overflow-hidden animate-in fade-in slide-in-from-top-1 duration-150">
+                    <div className="px-3 py-1 border-b border-slate-100 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                      Select Brand / Client
+                    </div>
+                    {projects.length === 0 ? (
+                      <div className="px-3 py-3 text-xs text-slate-400 text-center">
+                        No clients found.
+                      </div>
+                    ) : (
+                      projects.map((proj) => (
+                        <button
+                          key={proj.id}
+                          type="button"
+                          onClick={() => {
+                            setActiveProjectId(proj.id);
+                            setTargetPlatforms({
+                              facebook: !!proj.facebook,
+                              instagram: !!proj.instagram,
+                            });
+                            setShowClientDropdown(false);
+                          }}
+                          className={`w-full px-3 py-2 text-left flex items-center justify-between text-xs transition cursor-pointer ${
+                            proj.id === activeProjectId
+                              ? "bg-blue-50 text-blue-900 font-bold"
+                              : "hover:bg-slate-50 text-slate-700"
+                          }`}
+                        >
+                          <span className="truncate">{proj.name}</span>
+                          <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
+                            {proj.facebook && (
+                              <span className="text-blue-600 inline-flex items-center" title="Facebook">
+                                <FacebookIcon className="!w-3.5 !h-3.5" />
+                              </span>
+                            )}
+                            {proj.instagram && (
+                              <span className="text-pink-600 inline-flex items-center" title="Instagram">
+                                <InstagramIcon className="!w-3.5 !h-3.5" />
+                              </span>
+                            )}
+                          </div>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+
+            <button
+              onClick={() => setShowHistoryModal(true)}
+              className="flex items-center gap-1.5 text-xs font-semibold bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-lg transition shadow-xs cursor-pointer"
+            >
+              <History className="h-3.5 w-3.5 text-slate-600" />
+              <span className="hidden xs:inline">Queue</span>
+              <span className="text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.2 rounded-full font-bold">
+                {postHistory.length}
+              </span>
+            </button>
+
+            <button
+              onClick={() => setShowManageModal(true)}
+              className="flex items-center gap-1.5 text-xs font-semibold bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-lg transition shadow-xs cursor-pointer"
+            >
+              <Users className="h-3.5 w-3.5 text-slate-600" />
+              <span className="hidden xs:inline">Manage</span> ({projects.length})
+            </button>
+
+            <button
+              onClick={() => {
+                setEditingClientId(null);
+                setClientForm({
+                  name: "",
+                  platformType: "both",
+                  fbPageName: "",
+                  fbPageId: "",
+                  fbPasswordOrToken: "",
+                  igUsername: "",
+                  igAccountId: "",
+                  igPasswordOrToken: "",
+                });
+                setVerificationFeedback(null);
+                setShowAddModal(true);
+              }}
+              className="flex items-center gap-1 text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-lg transition shadow-xs cursor-pointer whitespace-nowrap"
+            >
+              <PlusCircle className="h-3.5 w-3.5" />
+              <span className="hidden xs:inline">Add</span> Client
+            </button>
+          </div>
         </div>
 
-        {/* Project Selector & Actions */}
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Custom Client Selector with Rich Real Platform Icons */}
-          <div className="relative">
+        {/* Mobile Only: Client Name Selector prominent at the top */}
+        <div className="mt-2.5 sm:hidden">
+          <div className="relative w-full">
             <button
               type="button"
               onClick={() => setShowClientDropdown((prev) => !prev)}
-              className="flex items-center bg-slate-100 hover:bg-slate-200/80 border border-slate-200 rounded-lg px-2.5 py-1.5 gap-2 transition cursor-pointer min-w-[170px]"
+              className="w-full flex items-center justify-between bg-slate-100 active:bg-slate-200 border border-slate-200 rounded-xl px-3 py-2 transition cursor-pointer"
             >
-              <span className="text-[11px] sm:text-xs text-slate-500 font-medium">Client:</span>
-
-              {activeProject ? (
-                <div className="flex items-center gap-1.5 flex-1 min-w-0">
-                  <span className="text-xs font-bold text-slate-900 truncate">
-                    {activeProject.name}
-                  </span>
-                  <div className="flex items-center gap-1 ml-auto flex-shrink-0">
-                    {activeProject.facebook && (
-                      <span className="text-blue-600 inline-flex items-center" title="Facebook Page Connected">
-                        <FacebookIcon className="!w-4 !h-4" />
-                      </span>
-                    )}
-                    {activeProject.instagram && (
-                      <span className="text-pink-600 inline-flex items-center" title="Instagram Connected">
-                        <InstagramIcon className="!w-4 !h-4" />
-                      </span>
-                    )}
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="text-xs text-slate-500 font-semibold">Client:</span>
+                {activeProject ? (
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span className="text-xs font-bold text-slate-900 truncate">
+                      {activeProject.name}
+                    </span>
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      {activeProject.facebook && (
+                        <span className="text-blue-600 inline-flex items-center" title="Facebook Connected">
+                          <FacebookIcon className="!w-3.5 !h-3.5" />
+                        </span>
+                      )}
+                      {activeProject.instagram && (
+                        <span className="text-pink-600 inline-flex items-center" title="Instagram Connected">
+                          <InstagramIcon className="!w-3.5 !h-3.5" />
+                        </span>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ) : (
-                <span className="text-xs text-slate-400 font-medium">No Client</span>
-              )}
-              <span className="text-[10px] text-slate-400">▼</span>
+                ) : (
+                  <span className="text-xs text-slate-400 font-medium">No Client Selected</span>
+                )}
+              </div>
+              <span className="text-[11px] text-slate-400 font-bold ml-2">▼</span>
             </button>
 
-            {/* Dropdown Menu */}
+            {/* Mobile Client Dropdown */}
             {showClientDropdown && (
               <>
                 <div
                   className="fixed inset-0 z-40"
                   onClick={() => setShowClientDropdown(false)}
                 />
-                <div className="absolute left-0 mt-1.5 w-60 bg-white border border-slate-200 rounded-xl shadow-xl z-50 py-1.5 overflow-hidden animate-in fade-in slide-in-from-top-1 duration-150">
-                  <div className="px-3 py-1 border-b border-slate-100 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                <div className="absolute left-0 right-0 mt-1.5 bg-white border border-slate-200 rounded-xl shadow-2xl z-50 py-1.5 overflow-hidden">
+                  <div className="px-3 py-1.5 border-b border-slate-100 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
                     Select Brand / Client
                   </div>
                   {projects.length === 0 ? (
@@ -1314,7 +1446,7 @@ export default function SocialComposer() {
                           });
                           setShowClientDropdown(false);
                         }}
-                        className={`w-full px-3 py-2 text-left flex items-center justify-between text-xs transition cursor-pointer ${
+                        className={`w-full px-3 py-2.5 text-left flex items-center justify-between text-xs transition cursor-pointer ${
                           proj.id === activeProjectId
                             ? "bg-blue-50 text-blue-900 font-bold"
                             : "hover:bg-slate-50 text-slate-700"
@@ -1323,12 +1455,12 @@ export default function SocialComposer() {
                         <span className="truncate">{proj.name}</span>
                         <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
                           {proj.facebook && (
-                            <span className="text-blue-600 inline-flex items-center" title="Facebook">
+                            <span className="text-blue-600 inline-flex items-center">
                               <FacebookIcon className="!w-3.5 !h-3.5" />
                             </span>
                           )}
                           {proj.instagram && (
-                            <span className="text-pink-600 inline-flex items-center" title="Instagram">
+                            <span className="text-pink-600 inline-flex items-center">
                               <InstagramIcon className="!w-3.5 !h-3.5" />
                             </span>
                           )}
@@ -1340,52 +1472,11 @@ export default function SocialComposer() {
               </>
             )}
           </div>
-
-          <button
-            onClick={() => setShowHistoryModal(true)}
-            className="flex items-center gap-1.5 text-xs font-semibold bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-lg transition shadow-xs cursor-pointer"
-          >
-            <History className="h-3.5 w-3.5 text-slate-600" />
-            <span className="hidden xs:inline">Queue</span>
-            <span className="text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.2 rounded-full font-bold">
-              {postHistory.length}
-            </span>
-          </button>
-
-          <button
-            onClick={() => setShowManageModal(true)}
-            className="flex items-center gap-1.5 text-xs font-semibold bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-lg transition shadow-xs cursor-pointer"
-          >
-            <Users className="h-3.5 w-3.5 text-slate-600" />
-            <span className="hidden xs:inline">Manage</span> ({projects.length})
-          </button>
-
-          <button
-            onClick={() => {
-              setEditingClientId(null);
-              setClientForm({
-                name: "",
-                platformType: "both",
-                fbPageName: "",
-                fbPageId: "",
-                fbPasswordOrToken: "",
-                igUsername: "",
-                igAccountId: "",
-                igPasswordOrToken: "",
-              });
-              setVerificationFeedback(null);
-              setShowAddModal(true);
-            }}
-            className="flex items-center gap-1 text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-lg transition shadow-xs cursor-pointer whitespace-nowrap"
-          >
-            <PlusCircle className="h-3.5 w-3.5" />
-            <span className="hidden xs:inline">Add</span> Client
-          </button>
         </div>
       </header>
 
-      {/* Main Workspace Layout */}
-      <main className="flex-1 max-w-6xl w-full mx-auto p-3 sm:p-6 grid grid-cols-1 lg:grid-cols-12 gap-5">
+      {/* Main Workspace Layout (Extra bottom padding on mobile for fixed bottom bar) */}
+      <main className="flex-1 max-w-6xl w-full mx-auto p-3 sm:p-6 pb-24 sm:pb-6 grid grid-cols-1 lg:grid-cols-12 gap-5">
         {/* Left Column: Post Composer (7 Cols) */}
         <div className="lg:col-span-7 flex flex-col gap-5">
           {/* Composer Mode Switcher: Single Post vs Bulk Multi-Day Scheduler */}
@@ -1400,7 +1491,7 @@ export default function SocialComposer() {
               }`}
             >
               <Send className="h-3.5 w-3.5" />
-              Single Post Composer
+              Create Post
             </button>
             <button
               type="button"
@@ -2860,6 +2951,63 @@ export default function SocialComposer() {
           </div>
         </div>
       )}
+
+      {/* Mobile Fixed Bottom Navigation Bar */}
+      <div className="sm:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200 px-3 py-2 flex items-center justify-between gap-2 shadow-lg shadow-slate-900/10">
+        {/* Queue & History Button */}
+        <button
+          type="button"
+          onClick={() => setShowHistoryModal(true)}
+          className="flex-1 py-1.5 px-1 flex flex-col items-center justify-center gap-0.5 rounded-xl hover:bg-slate-100 text-slate-700 active:scale-95 transition cursor-pointer"
+        >
+          <div className="relative">
+            <History className="h-4 w-4 text-slate-700" />
+            <span className="absolute -top-1.5 -right-2.5 text-[9px] bg-blue-600 text-white px-1.5 py-0.2 rounded-full font-bold">
+              {postHistory.length}
+            </span>
+          </div>
+          <span className="text-[10px] font-bold text-slate-700">History</span>
+        </button>
+
+        {/* Manage Clients Button with Count */}
+        <button
+          type="button"
+          onClick={() => setShowManageModal(true)}
+          className="flex-1 py-1.5 px-1 flex flex-col items-center justify-center gap-0.5 rounded-xl hover:bg-slate-100 text-slate-700 active:scale-95 transition cursor-pointer"
+        >
+          <div className="relative">
+            <Users className="h-4 w-4 text-slate-700" />
+            <span className="absolute -top-1.5 -right-2.5 text-[9px] bg-slate-200 text-slate-800 px-1.5 py-0.2 rounded-full font-bold">
+              {projects.length}
+            </span>
+          </div>
+          <span className="text-[10px] font-bold text-slate-700">Clients</span>
+        </button>
+
+        {/* Add Client Action Button */}
+        <button
+          type="button"
+          onClick={() => {
+            setEditingClientId(null);
+            setClientForm({
+              name: "",
+              platformType: "both",
+              fbPageName: "",
+              fbPageId: "",
+              fbPasswordOrToken: "",
+              igUsername: "",
+              igAccountId: "",
+              igPasswordOrToken: "",
+            });
+            setVerificationFeedback(null);
+            setShowAddModal(true);
+          }}
+          className="flex-1.5 py-2 px-3 bg-blue-600 active:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-sm active:scale-95 transition cursor-pointer"
+        >
+          <PlusCircle className="h-4 w-4" />
+          <span>Add Client</span>
+        </button>
+      </div>
     </div>
   );
 }
