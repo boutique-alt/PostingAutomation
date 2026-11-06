@@ -149,6 +149,17 @@ export default function SocialComposer() {
         connected: true,
       },
     },
+    {
+      id: "proj_boutique",
+      name: "Boutique Fashion",
+      connectMode: "gbp",
+      gbp: {
+        locationName: "Boutique Fashion",
+        locationId: "2766843255278767272",
+        accessToken: "",
+        connected: true,
+      },
+    },
   ]);
   const [isLoaded, setIsLoaded] = useState<boolean>(true);
 
