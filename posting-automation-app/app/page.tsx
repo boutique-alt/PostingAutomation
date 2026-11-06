@@ -1412,8 +1412,12 @@ export default function SocialComposer() {
               }`}
             >
               <Calendar className="h-3.5 w-3.5" />
-              Bulk Multi-Day Scheduler ({bulkPosts.length} posts)
-              <span className="text-[10px] bg-white/20 text-white px-1.5 py-0.2 rounded-full font-semibold">New</span>
+              Multi Post Schedule
+              {bulkPosts.length > 0 && (
+                <span className="text-[10px] bg-white/20 text-white px-1.5 py-0.2 rounded-full font-semibold">
+                  {bulkPosts.length}
+                </span>
+              )}
             </button>
           </div>
 
@@ -1788,10 +1792,10 @@ export default function SocialComposer() {
             <div>
               <h3 className="text-xs font-bold text-indigo-950 flex items-center gap-1.5">
                 <Calendar className="h-4 w-4 text-indigo-600" />
-                Multi-Day Content Planner & Bulk Scheduler
+                Multi Post Schedule
               </h3>
               <p className="text-[11px] text-indigo-700 mt-0.5">
-                Draft today, tomorrow, and subsequent days&apos; posts simultaneously. Schedule all in 1 click!
+                Schedule multiple posts for different days & times in one go.
               </p>
             </div>
             <button
@@ -1826,7 +1830,7 @@ export default function SocialComposer() {
                 <Calendar className="h-6 w-6" />
               </div>
               <div>
-                <h4 className="text-sm font-bold text-slate-800">Multi-Day Bulk Planner</h4>
+                <h4 className="text-sm font-bold text-slate-800">Multi Post Schedule</h4>
                 <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
                   Click below to add post slots and plan your multi-day queue.
                 </p>
