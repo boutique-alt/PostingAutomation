@@ -17,6 +17,8 @@ export async function GET() {
       errorMessage: r.errorMessage,
       time: r.time,
       mediaCount: r.mediaCount,
+      mediaPath: r.mediaPath || null,
+      scheduleEpoch: r.scheduleEpoch || null,
     }));
 
     return NextResponse.json({ success: true, history });
@@ -32,8 +34,8 @@ export async function POST(req: Request) {
 
     const insert = db.prepare(`
       INSERT OR REPLACE INTO posts (
-        id, clientId, projectName, platforms, postType, caption, status, errorMessage, time, mediaCount
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        id, clientId, projectName, platforms, postType, caption, status, errorMessage, time, mediaCount, mediaPath, scheduleEpoch
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     insert.run(
@@ -46,10 +48,25 @@ export async function POST(req: Request) {
       data.status,
       data.errorMessage || null,
       data.time || "Just now",
-      data.mediaCount || 0
+      data.mediaCount || 0,
+      data.mediaPath || null,
+      data.scheduleEpoch || null
     );
 
     return NextResponse.json({ success: true, id });
+  } catch (err: any) {
+    return NextResponse.json({ success: false, error: err.message }, { status: 500 });
+  }
+}
+
+export async function DELETE(req: Request) {
+  try {
+    const { searchParams } = new URL(req.url);
+    const id = searchParams.get("id");
+    if (!id) return NextResponse.json({ error: "Missing ID" }, { status: 400 });
+
+    db.prepare("DELETE FROM posts WHERE id = ?").run(id);
+    return NextResponse.json({ success: true });
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }

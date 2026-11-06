@@ -77,6 +77,17 @@ export interface PostHistoryItem {
   errorMessage?: string;
   time: string;
   mediaCount: number;
+  mediaPath?: string;
+  scheduleEpoch?: number;
+}
+
+export interface BulkPostItem {
+  id: string;
+  postType: "poster" | "reel";
+  caption: string;
+  mediaFile: MediaFileItem | null;
+  scheduleTime: string;
+  isCustomScheduled: boolean;
 }
 
 export interface MediaFileItem {
@@ -142,6 +153,11 @@ export default function SocialComposer() {
   const [mediaFiles, setMediaFiles] = useState<MediaFileItem[]>([]);
   const [isCheckingRatio, setIsCheckingRatio] = useState<boolean>(false);
   
+  // Mode: Single Post Composer vs Bulk Multi-Day Scheduler
+  const [composerMode, setComposerMode] = useState<"single" | "bulk">("single");
+  const [bulkPosts, setBulkPosts] = useState<BulkPostItem[]>([]);
+  const [bulkSchedulingStatus, setBulkSchedulingStatus] = useState<string | null>(null);
+
   // Scheduling
   const [isScheduled, setIsScheduled] = useState<boolean>(false);
   const [scheduleTime, setScheduleTime] = useState<string>("");
@@ -149,7 +165,32 @@ export default function SocialComposer() {
   const [isPublishing, setIsPublishing] = useState<boolean>(false);
   const [publishSuccess, setPublishSuccess] = useState<string | null>(null);
 
-  // Post Queue & History
+  // Live Feed Data from Meta Graph API (Real Photos, Videos, Likes & Comments)
+  const [livePosts, setLivePosts] = useState<any[]>([]);
+  const [isLoadingLiveFeed, setIsLoadingLiveFeed] = useState<boolean>(false);
+
+  const fetchLiveFeed = (clientId?: string) => {
+    const cId = clientId || activeProjectId || "proj_hasibul";
+    setIsLoadingLiveFeed(true);
+    fetch(`/api/live-feed?clientId=${cId}`, { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d) => {
+        setIsLoadingLiveFeed(false);
+        if (d.success && Array.isArray(d.posts)) {
+          setLivePosts(d.posts);
+        }
+      })
+      .catch((err) => {
+        console.error("Error fetching live feed:", err);
+        setIsLoadingLiveFeed(false);
+      });
+  };
+
+  useEffect(() => {
+    if (activeProjectId) {
+      fetchLiveFeed(activeProjectId);
+    }
+  }, [activeProjectId]);
   const [postHistory, setPostHistory] = useState<PostHistoryItem[]>([
     {
       id: "post_1",
@@ -557,6 +598,107 @@ export default function SocialComposer() {
     }
   };
 
+  const handleDeletePost = async (item: any, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    const isLiveFb = item.platform === "facebook" && item.originalId;
+    const isLiveIg = item.platform === "instagram" || item.id?.startsWith("ig_");
+    
+    let confirmMsg = "Are you sure you want to delete this post from your queue & schedule?";
+    if (isLiveFb) {
+      confirmMsg = "⚠️ Are you sure? This will delete this post permanently from your LIVE Facebook Page as well as your local queue!";
+    } else if (isLiveIg) {
+      confirmMsg = "Are you sure you want to remove this Instagram post from your dashboard?";
+    }
+
+    if (!confirm(confirmMsg)) return;
+
+    try {
+      const res = await fetch(`/api/live-post?postId=${item.id}&platform=${item.platform || "facebook"}&clientId=${activeProjectId}`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+      
+      if (data.success) {
+        setPostHistory((prev) => prev.filter((p) => p.id !== item.id));
+        setLivePosts((prev) => prev.filter((p) => p.id !== item.id));
+        alert("✅ " + (data.message || "Post deleted successfully!"));
+      } else {
+        alert("⚠️ " + (data.error || "Could not delete from Meta"));
+      }
+    } catch (err) {
+      console.error("Failed to delete post:", err);
+      alert("❌ Failed to connect to server to delete post.");
+    }
+  };
+
+  const handleEditPostCaption = async (item: any, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+
+    // Instagram check
+    if (item.platform === "instagram" || item.id?.startsWith("ig_")) {
+      alert("⚠️ Meta (Instagram) API Restriction:\n\nInstagram does not allow any 3rd-party tool to edit captions of already-published Instagram posts via API.\n\n👉 Options:\n1. Edit caption directly inside the official Instagram app, OR\n2. Click '🔁 Repost now' button to publish an updated version with the new caption!");
+      return;
+    }
+
+    const newCap = prompt("Edit Facebook Post Caption:", item.caption || "");
+    if (newCap === null || newCap === item.caption) return;
+
+    try {
+      const res = await fetch("/api/live-post", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          postId: item.id,
+          newCaption: newCap,
+          platform: item.platform || "facebook",
+          clientId: activeProjectId,
+        }),
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        setPostHistory((prev) =>
+          prev.map((p) => (p.id === item.id ? { ...p, caption: newCap } : p))
+        );
+        setLivePosts((prev) =>
+          prev.map((p) => (p.id === item.id ? { ...p, caption: newCap } : p))
+        );
+        alert("✅ " + (data.message || "Caption updated successfully!"));
+      } else {
+        alert("⚠️ " + (data.error || "Failed to update caption on Meta"));
+      }
+    } catch (err) {
+      console.error("Failed to edit post:", err);
+      alert("❌ Failed to update caption.");
+    }
+  };
+
+  const handleRepost = (post: PostHistoryItem) => {
+    // Fill the composer with the selected post's data for reposting or rescheduling
+    setPostType((post.postType as any) || "poster");
+    setCaption(post.caption || "");
+    
+    // Switch to single mode if in bulk
+    setComposerMode("single");
+
+    // Pre-check platforms
+    const fbEnabled = post.platforms.includes("facebook");
+    const igEnabled = post.platforms.includes("instagram");
+    setTargetPlatforms({
+      facebook: fbEnabled,
+      instagram: igEnabled,
+    });
+
+    // Match client if found
+    const matchingProj = projects.find((p) => p.name === post.projectName);
+    if (matchingProj) {
+      setActiveProjectId(matchingProj.id);
+    }
+
+    setShowHistoryModal(false);
+    alert(`Loaded post "${post.caption.slice(0, 30)}..." into composer. You can now adjust, upload image/video, and Repost or Reschedule!`);
+  };
+
   const handleRetryPost = (post: PostHistoryItem) => {
     setPostHistory((prev) =>
       prev.map((item) =>
@@ -958,6 +1100,127 @@ export default function SocialComposer() {
     }
   };
 
+  // Handle Bulk Multi-Post Scheduling
+  const handleBulkSchedule = async () => {
+    if (!activeProject) {
+      alert("Please select or add a client first.");
+      return;
+    }
+
+    const selectedList = Object.entries(targetPlatforms)
+      .filter(([_, enabled]) => enabled)
+      .map(([name]) => name);
+
+    if (selectedList.length === 0) {
+      alert("Please select at least one connected account (Facebook or Instagram) to publish.");
+      return;
+    }
+
+    const validPostsToSchedule = bulkPosts.filter((p) => p.caption.trim() || p.mediaFile !== null);
+
+    if (validPostsToSchedule.length === 0) {
+      alert("Please provide media or caption for at least one post card in the queue.");
+      return;
+    }
+
+    setIsPublishing(true);
+    setBulkSchedulingStatus("Starting bulk schedule processing...");
+
+    const createdHistoryItems: PostHistoryItem[] = [];
+    let successCount = 0;
+    let failCount = 0;
+
+    for (let i = 0; i < validPostsToSchedule.length; i++) {
+      const item = validPostsToSchedule[i];
+      setBulkSchedulingStatus(`Scheduling Post ${i + 1} of ${validPostsToSchedule.length} for ${item.scheduleTime}...`);
+
+      const epochSeconds = Math.floor(new Date(item.scheduleTime).getTime() / 1000);
+
+      const formData = new FormData();
+      formData.append("projectId", activeProject.id);
+      formData.append("projectName", activeProject.name);
+      formData.append("platforms", JSON.stringify(selectedList));
+      formData.append("postType", item.postType);
+      formData.append("caption", item.caption);
+      formData.append("isScheduled", "true");
+      formData.append("scheduleTime", item.scheduleTime);
+      formData.append("scheduleEpoch", String(epochSeconds));
+      formData.append(
+        "clientCredentials",
+        JSON.stringify({
+          fbPageId: activeProject.facebook?.pageId,
+          fbToken: activeProject.facebook?.accessToken,
+          igAccountId: activeProject.instagram?.accountId,
+          igToken: activeProject.instagram?.accessToken || activeProject.facebook?.accessToken,
+        })
+      );
+
+      if (item.mediaFile?.file) {
+        formData.append("files", item.mediaFile.file);
+      }
+
+      try {
+        const res = await fetch("/api/publish", {
+          method: "POST",
+          body: formData,
+        });
+        const data = await res.json();
+
+        if (res.ok && data.success) {
+          successCount++;
+          const hItem: PostHistoryItem = {
+            id: "post_" + Date.now() + "_" + i,
+            projectName: activeProject.name,
+            platforms: selectedList,
+            postType: item.postType,
+            caption: item.caption,
+            status: "scheduled",
+            time: `Scheduled for ${item.scheduleTime}`,
+            mediaCount: item.mediaFile ? 1 : 0,
+            scheduleEpoch: epochSeconds,
+          };
+          fetch("/api/history", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ...hItem, clientId: activeProject.id }),
+          }).catch(() => {});
+          createdHistoryItems.push(hItem);
+        } else {
+          failCount++;
+          const failedMsg = data.errors ? Object.values(data.errors).join(", ") : data.error || "Schedule error";
+          const fItem: PostHistoryItem = {
+            id: "post_" + Date.now() + "_" + i,
+            projectName: activeProject.name,
+            platforms: selectedList,
+            postType: item.postType,
+            caption: item.caption,
+            status: "failed",
+            errorMessage: failedMsg,
+            time: `Scheduled for ${item.scheduleTime}`,
+            mediaCount: item.mediaFile ? 1 : 0,
+          };
+          fetch("/api/history", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ...fItem, clientId: activeProject.id }),
+          }).catch(() => {});
+          createdHistoryItems.push(fItem);
+        }
+      } catch (err: any) {
+        failCount++;
+      }
+    }
+
+    setIsPublishing(false);
+    setBulkSchedulingStatus(null);
+    setPostHistory((prev) => [...createdHistoryItems, ...prev]);
+
+    alert(`🎉 Bulk Scheduling Completed!\n\n✅ Successfully Scheduled: ${successCount} post(s)\n${failCount > 0 ? `❌ Failed: ${failCount} post(s)` : ""}\n\nYou can view your scheduled queue in the 'Queue & History' modal.`);
+    
+    // Reset bulk list to empty
+    setBulkPosts([]);
+  };
+
   const filteredHistory = postHistory.filter((item) => {
     if (historyFilter === "all") return true;
     return item.status === historyFilter;
@@ -1125,6 +1388,35 @@ export default function SocialComposer() {
       <main className="flex-1 max-w-6xl w-full mx-auto p-3 sm:p-6 grid grid-cols-1 lg:grid-cols-12 gap-5">
         {/* Left Column: Post Composer (7 Cols) */}
         <div className="lg:col-span-7 flex flex-col gap-5">
+          {/* Composer Mode Switcher: Single Post vs Bulk Multi-Day Scheduler */}
+          <div className="bg-white border border-slate-200 rounded-xl p-2 shadow-xs flex items-center justify-between gap-2">
+            <button
+              type="button"
+              onClick={() => setComposerMode("single")}
+              className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                composerMode === "single"
+                  ? "bg-blue-600 text-white shadow-xs"
+                  : "bg-slate-50 text-slate-600 hover:bg-slate-100"
+              }`}
+            >
+              <Send className="h-3.5 w-3.5" />
+              Single Post Composer
+            </button>
+            <button
+              type="button"
+              onClick={() => setComposerMode("bulk")}
+              className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                composerMode === "bulk"
+                  ? "bg-indigo-600 text-white shadow-xs"
+                  : "bg-slate-50 text-slate-600 hover:bg-slate-100"
+              }`}
+            >
+              <Calendar className="h-3.5 w-3.5" />
+              Bulk Multi-Day Scheduler ({bulkPosts.length} posts)
+              <span className="text-[10px] bg-white/20 text-white px-1.5 py-0.2 rounded-full font-semibold">New</span>
+            </button>
+          </div>
+
           {/* Step 1: Target Accounts */}
           <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs">
             <div className="flex items-center justify-between mb-3">
@@ -1222,8 +1514,10 @@ export default function SocialComposer() {
             </div>
           </div>
 
-          {/* Step 2: Content Type Selection */}
-          <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs">
+          {composerMode === "single" ? (
+            <>
+              {/* Step 2: Content Type Selection */}
+              <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs">
             <div className="flex items-center justify-between mb-3">
               <label className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-2">
                 <span className="h-5 w-5 rounded-full bg-blue-600 text-white flex items-center justify-center text-[11px] font-bold">2</span>
@@ -1486,6 +1780,278 @@ export default function SocialComposer() {
                 : "Publish Now"}
             </button>
           </div>
+        </>
+      ) : (
+        /* BULK MULTI-POST SCHEDULER VIEW */
+        <div className="space-y-4">
+          <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div>
+              <h3 className="text-xs font-bold text-indigo-950 flex items-center gap-1.5">
+                <Calendar className="h-4 w-4 text-indigo-600" />
+                Multi-Day Content Planner & Bulk Scheduler
+              </h3>
+              <p className="text-[11px] text-indigo-700 mt-0.5">
+                Draft today, tomorrow, and subsequent days&apos; posts simultaneously. Schedule all in 1 click!
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                const nextDays = bulkPosts.length;
+                const d = new Date(Date.now() + (nextDays * 24 + 2) * 3600000);
+                const newTime = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}T12:00`;
+                setBulkPosts((prev) => [
+                  ...prev,
+                  {
+                    id: "bulk_" + Date.now(),
+                    postType: "poster",
+                    caption: "",
+                    mediaFile: null,
+                    scheduleTime: newTime,
+                    isCustomScheduled: true,
+                  },
+                ]);
+              }}
+              className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg transition flex items-center gap-1 cursor-pointer shrink-0 shadow-xs"
+            >
+              <PlusCircle className="h-3.5 w-3.5" />
+              Add Post Slot
+            </button>
+          </div>
+
+          {/* List of Bulk Post Cards or Empty State */}
+          {bulkPosts.length === 0 ? (
+            <div className="bg-white border-2 border-dashed border-indigo-200 rounded-2xl p-8 text-center space-y-3">
+              <div className="h-12 w-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center mx-auto">
+                <Calendar className="h-6 w-6" />
+              </div>
+              <div>
+                <h4 className="text-sm font-bold text-slate-800">Multi-Day Bulk Planner</h4>
+                <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
+                  Click below to add post slots and plan your multi-day queue.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  const d = new Date(Date.now() + 2 * 3600000);
+                  const newTime = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}T${String(d.getHours()).padStart(2, "0")}:00`;
+                  setBulkPosts([
+                    {
+                      id: "bulk_" + Date.now(),
+                      postType: "poster",
+                      caption: "",
+                      mediaFile: null,
+                      scheduleTime: newTime,
+                      isCustomScheduled: true,
+                    },
+                  ]);
+                }}
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition inline-flex items-center gap-1.5 shadow-sm cursor-pointer"
+              >
+                <PlusCircle className="h-4 w-4" />
+                Add First Post Slot
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {bulkPosts.map((postCard, idx) => (
+                <div
+                  key={postCard.id}
+                  className="bg-white border border-slate-200 rounded-xl p-4 sm:p-5 shadow-xs space-y-3.5 relative"
+                >
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                    <div className="flex items-center gap-2">
+                      <span className="h-6 w-6 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-xs font-bold">
+                        {idx + 1}
+                      </span>
+                      <span className="text-xs font-bold text-slate-800">
+                        {idx === 0
+                          ? "Post 1 (Today / Upcoming)"
+                          : idx === 1
+                          ? "Post 2 (Tomorrow)"
+                          : `Post ${idx + 1} (Day ${idx + 1})`}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <select
+                        value={postCard.postType}
+                        onChange={(e) => {
+                          const val = e.target.value as "poster" | "reel";
+                          setBulkPosts((prev) =>
+                            prev.map((p) => (p.id === postCard.id ? { ...p, postType: val } : p))
+                          );
+                        }}
+                        className="bg-slate-50 border border-slate-200 rounded-lg text-[11px] font-semibold text-slate-700 px-2 py-1 focus:outline-none"
+                      >
+                        <option value="poster">Poster (1:1 / 4:5)</option>
+                        <option value="reel">Reels (9:16)</option>
+                      </select>
+
+                      <button
+                        type="button"
+                        onClick={() => setBulkPosts((prev) => prev.filter((p) => p.id !== postCard.id))}
+                        className="p-1 text-slate-400 hover:text-red-600 transition cursor-pointer"
+                        title="Remove this post slot"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+
+                {/* Schedule Date & Time Picker */}
+                <div className="bg-slate-50 border border-slate-200/80 rounded-lg p-2.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700">
+                    <Clock className="h-4 w-4 text-indigo-600" />
+                    <span>Publish Time:</span>
+                  </div>
+                  <input
+                    type="datetime-local"
+                    value={postCard.scheduleTime}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setBulkPosts((prev) =>
+                        prev.map((p) => (p.id === postCard.id ? { ...p, scheduleTime: val } : p))
+                      );
+                    }}
+                    className="bg-white border border-slate-300 text-xs text-slate-900 rounded-md px-2.5 py-1.5 font-medium focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+
+                {/* Media Upload for this post card */}
+                <div>
+                  {postCard.mediaFile ? (
+                    <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-lg flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="h-10 w-10 rounded-md overflow-hidden bg-white border border-slate-200 shrink-0">
+                          {postCard.mediaFile.type === "video" ? (
+                            <video src={postCard.mediaFile.url} className="h-full w-full object-cover" />
+                          ) : (
+                            <img src={postCard.mediaFile.url} alt="file" className="h-full w-full object-cover" />
+                          )}
+                        </div>
+                        <div className="min-w-0">
+                          <span className="text-xs font-bold text-slate-800 truncate block">
+                            {postCard.mediaFile.name}
+                          </span>
+                          <span className="text-[10px] text-slate-500">
+                            {postCard.mediaFile.ratioLabel}
+                          </span>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setBulkPosts((prev) =>
+                            prev.map((p) => (p.id === postCard.id ? { ...p, mediaFile: null } : p))
+                          )
+                        }
+                        className="p-1 text-slate-400 hover:text-red-600 transition"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="border border-dashed border-slate-300 hover:border-indigo-400 rounded-lg p-3 text-center bg-slate-50/50">
+                      <input
+                        type="file"
+                        id={`bulk_media_${postCard.id}`}
+                        accept={postCard.postType === "reel" ? "video/*" : "image/*,video/*"}
+                        onChange={async (e) => {
+                          const f = e.target.files?.[0];
+                          if (!f) return;
+                          const isVid = f.type.startsWith("video");
+                          const u = URL.createObjectURL(f);
+                          const { width, height } = await new Promise<{ width: number; height: number }>((resolve) => {
+                            if (isVid) {
+                              const v = document.createElement("video");
+                              v.preload = "metadata";
+                              v.onloadedmetadata = () => resolve({ width: v.videoWidth || 1080, height: v.videoHeight || 1920 });
+                              v.src = u;
+                            } else {
+                              const img = new Image();
+                              img.onload = () => resolve({ width: img.naturalWidth || 1080, height: img.naturalHeight || 1080 });
+                              img.src = u;
+                            }
+                          });
+                          const validation = validateAspectRatio(width, height, isVid ? "video" : "image", postCard.postType);
+                          const mItem: MediaFileItem = {
+                            url: u,
+                            name: f.name,
+                            file: f,
+                            type: isVid ? "video" : "image",
+                            width,
+                            height,
+                            aspectRatio: width / height,
+                            ratioLabel: validation.label,
+                            isValidRatio: validation.isValid,
+                            ratioWarning: validation.warning,
+                          };
+                          setBulkPosts((prev) =>
+                            prev.map((p) => (p.id === postCard.id ? { ...p, mediaFile: mItem } : p))
+                          );
+                        }}
+                        className="hidden"
+                      />
+                      <label
+                        htmlFor={`bulk_media_${postCard.id}`}
+                        className="cursor-pointer text-xs font-semibold text-indigo-600 hover:text-indigo-800 flex items-center justify-center gap-1.5"
+                      >
+                        <ImageIcon className="h-4 w-4" />
+                        Select Photo / Video for Post {idx + 1}
+                      </label>
+                    </div>
+                  )}
+                </div>
+
+                {/* Caption for this post card */}
+                <textarea
+                  rows={2}
+                  value={postCard.caption}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setBulkPosts((prev) =>
+                      prev.map((p) => (p.id === postCard.id ? { ...p, caption: val } : p))
+                    );
+                  }}
+                  placeholder={`Caption for Post ${idx + 1}...`}
+                  className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-indigo-500 font-medium"
+                />
+              </div>
+            ))}
+          </div>
+          )}
+
+          {/* Submit All Bulk Posts Button */}
+          <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs space-y-3">
+            {bulkSchedulingStatus && (
+              <div className="p-3 bg-indigo-50 border border-indigo-200 rounded-lg text-indigo-800 text-xs flex items-center gap-2">
+                <div className="h-4 w-4 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin shrink-0" />
+                <span className="font-semibold">{bulkSchedulingStatus}</span>
+              </div>
+            )}
+
+            <button
+              type="button"
+              disabled={isPublishing || bulkPosts.length === 0}
+              onClick={handleBulkSchedule}
+              className="w-full py-3.5 px-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm rounded-xl shadow-sm flex items-center justify-center gap-2 transition disabled:opacity-50 cursor-pointer"
+            >
+              {isPublishing ? (
+                <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              ) : (
+                <Calendar className="h-4 w-4" />
+              )}
+              {isPublishing
+                ? "Processing Queue..."
+                : bulkPosts.length === 0
+                ? "Add a post slot above to schedule"
+                : `Schedule All (${bulkPosts.length}) Posts in Queue`}
+            </button>
+          </div>
+        </div>
+      )}
         </div>
 
         {/* Right Column: Live Mockup Preview (5 Cols) */}
@@ -1569,13 +2135,16 @@ export default function SocialComposer() {
       {/* Modal: Post History & Queue */}
       {showHistoryModal && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 flex items-center justify-center p-2 sm:p-4">
-          <div className="bg-white border border-slate-200 rounded-2xl max-w-3xl w-full p-4 sm:p-6 space-y-4 shadow-2xl max-h-[92vh] flex flex-col">
+          <div className="bg-white border border-slate-200 rounded-2xl max-w-4xl w-full p-4 sm:p-6 space-y-4 shadow-2xl max-h-[92vh] flex flex-col">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div className="flex items-center gap-2">
-                <History className="h-5 w-5 text-blue-600" />
-                <h3 className="text-sm sm:text-base font-bold text-slate-900">
-                  Posts Queue & History
-                </h3>
+                <History className="h-5 w-5 text-indigo-600" />
+                <div>
+                  <h3 className="text-sm sm:text-base font-bold text-slate-900">
+                    Content Feed & Scheduled Posts
+                  </h3>
+                  <p className="text-[11px] text-slate-500">Live preview of published and scheduled multi-platform posts</p>
+                </div>
               </div>
               <button
                 onClick={() => setShowHistoryModal(false)}
@@ -1586,125 +2155,283 @@ export default function SocialComposer() {
             </div>
 
             {/* Status Filter Tabs */}
-            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 border-b border-slate-100 pb-2">
-              <button
-                onClick={() => setHistoryFilter("all")}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
-                  historyFilter === "all"
-                    ? "bg-slate-900 text-white"
-                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                }`}
-              >
-                All Posts ({postHistory.length})
-              </button>
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2">
+              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                <button
+                  onClick={() => setHistoryFilter("all")}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                    historyFilter === "all"
+                      ? "bg-slate-900 text-white"
+                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                  }`}
+                >
+                  All Posts ({livePosts.length > 0 ? livePosts.length : postHistory.length})
+                </button>
+
+                <button
+                  onClick={() => setHistoryFilter("scheduled")}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer ${
+                    historyFilter === "scheduled"
+                      ? "bg-amber-600 text-white"
+                      : "bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200"
+                  }`}
+                >
+                  <Clock className="h-3.5 w-3.5" />
+                  Scheduled Queue ({livePosts.filter((p) => p.status === "scheduled").length || scheduledCount})
+                </button>
+
+                <button
+                  onClick={() => setHistoryFilter("published")}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer ${
+                    historyFilter === "published"
+                      ? "bg-emerald-600 text-white"
+                      : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200"
+                  }`}
+                >
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  Live Published ({livePosts.filter((p) => p.status === "published").length || publishedCount})
+                </button>
+
+                <button
+                  onClick={() => setHistoryFilter("failed")}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer ${
+                    historyFilter === "failed"
+                      ? "bg-red-600 text-white"
+                      : "bg-red-50 text-red-700 hover:bg-red-100 border border-red-200"
+                  }`}
+                >
+                  <XCircle className="h-3.5 w-3.5" />
+                  Failed ({failedCount})
+                </button>
+              </div>
 
               <button
-                onClick={() => setHistoryFilter("published")}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer ${
-                  historyFilter === "published"
-                    ? "bg-emerald-600 text-white"
-                    : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200"
-                }`}
+                type="button"
+                disabled={isLoadingLiveFeed}
+                onClick={() => fetchLiveFeed(activeProjectId)}
+                className="px-2.5 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-lg text-xs font-bold flex items-center gap-1.5 transition cursor-pointer disabled:opacity-50"
+                title="Refresh Live Data from Facebook & Instagram Graph API"
               >
-                <CheckCircle2 className="h-3.5 w-3.5" />
-                Published ({publishedCount})
-              </button>
-
-              <button
-                onClick={() => setHistoryFilter("scheduled")}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer ${
-                  historyFilter === "scheduled"
-                    ? "bg-amber-600 text-white"
-                    : "bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200"
-                }`}
-              >
-                <Clock className="h-3.5 w-3.5" />
-                Scheduled ({scheduledCount})
-              </button>
-
-              <button
-                onClick={() => setHistoryFilter("failed")}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer ${
-                  historyFilter === "failed"
-                    ? "bg-red-600 text-white"
-                    : "bg-red-50 text-red-700 hover:bg-red-100 border border-red-200"
-                }`}
-              >
-                <XCircle className="h-3.5 w-3.5" />
-                Failed ({failedCount})
+                <RefreshCw className={`h-3.5 w-3.5 ${isLoadingLiveFeed ? "animate-spin" : ""}`} />
+                <span>{isLoadingLiveFeed ? "Syncing..." : "Sync Live Meta Data"}</span>
               </button>
             </div>
 
-            {/* List of Posts */}
-            <div className="overflow-y-auto flex-1 divide-y divide-slate-100 pr-1">
-              {filteredHistory.length === 0 ? (
-                <div className="text-center py-12 text-slate-400">
-                  <Filter className="h-8 w-8 mx-auto mb-2 text-slate-300" />
-                  <p className="text-xs font-medium">No {historyFilter} posts found in queue.</p>
+            {/* List of Posts in Modern Card Grid UI with REAL Meta Media, Likes & Comments */}
+            <div className="overflow-y-auto flex-1 pr-1">
+              {isLoadingLiveFeed ? (
+                <div className="text-center py-20 text-slate-500 space-y-2">
+                  <div className="h-8 w-8 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto" />
+                  <p className="text-xs font-bold">Syncing live posts, photos, likes & comments directly from Meta Graph API...</p>
                 </div>
               ) : (
-                filteredHistory.map((item) => (
-                  <div key={item.id} className="py-4 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-bold text-slate-900">{item.projectName}</span>
-                        <span className="text-[10px] bg-slate-100 text-slate-700 border border-slate-200 px-2 py-0.5 rounded-full font-semibold uppercase">
-                          {item.postType}
-                        </span>
-                        
-                        {item.status === "published" && (
-                          <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1">
-                            <CheckCircle2 className="h-3 w-3" /> Published
-                          </span>
-                        )}
-                        {item.status === "scheduled" && (
-                          <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold bg-amber-50 text-amber-700 border border-amber-200 flex items-center gap-1">
-                            <Clock className="h-3 w-3" /> Scheduled
-                          </span>
-                        )}
-                        {item.status === "failed" && (
-                          <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold bg-red-50 text-red-700 border border-red-200 flex items-center gap-1">
-                            <XCircle className="h-3 w-3" /> Failed
-                          </span>
-                        )}
-                      </div>
+                (() => {
+                  const displayList = livePosts.length > 0 ? livePosts : postHistory;
+                  const finalFiltered = displayList.filter((item) => {
+                    if (historyFilter === "all") return true;
+                    return item.status === historyFilter;
+                  });
 
-                      <div className="flex items-center gap-2">
-                        <span className="text-[11px] text-slate-400">{item.time}</span>
-                        {item.status === "failed" && (
-                          <button
-                            type="button"
-                            onClick={() => handleRetryPost(item)}
-                            className="px-2 py-1 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded text-[10px] font-bold flex items-center gap-1 cursor-pointer transition"
+                  if (finalFiltered.length === 0) {
+                    return (
+                      <div className="text-center py-16 text-slate-400">
+                        <Filter className="h-10 w-10 mx-auto mb-2 text-slate-300" />
+                        <p className="text-xs font-medium">No {historyFilter} posts found in your feed.</p>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 pb-2">
+                      {finalFiltered.map((item) => {
+                        const imgUrl = item.mediaUrl || item.mediaPath || null;
+                        const isVideo = item.isVideo || item.postType === "reel";
+                        const isInsta = item.platform === "instagram" || item.platforms?.includes("instagram");
+                        const isFb = item.platform === "facebook" || item.platforms?.includes("facebook");
+
+                        return (
+                          <div
+                            key={item.id}
+                            className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-xs hover:shadow-md transition flex flex-col group"
                           >
-                            <RotateCcw className="h-3 w-3" /> Retry Post
-                          </button>
-                        )}
-                      </div>
+                            {/* Real Meta Media Header / Preview Area */}
+                            <div className="relative aspect-video bg-slate-900 flex items-center justify-center overflow-hidden">
+                              {imgUrl ? (
+                                isVideo ? (
+                                  <video src={imgUrl} className="w-full h-full object-cover" controls />
+                                ) : (
+                                  <img
+                                    src={imgUrl}
+                                    alt="Meta post media"
+                                    className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
+                                    onError={(e) => {
+                                      // Fallback on broken remote CDN
+                                      (e.target as any).style.display = "none";
+                                    }}
+                                  />
+                                )
+                              ) : (
+                                <div className="w-full h-full bg-gradient-to-tr from-slate-800 to-indigo-950 flex flex-col items-center justify-center p-4 text-center">
+                                  {isVideo ? (
+                                    <Video className="h-8 w-8 text-indigo-400 mb-1" />
+                                  ) : (
+                                    <ImageIcon className="h-8 w-8 text-indigo-400 mb-1" />
+                                  )}
+                                  <span className="text-[11px] font-bold text-white/90 truncate max-w-[90%]">
+                                    {item.projectName}
+                                  </span>
+                                  <span className="text-[10px] text-indigo-200 uppercase tracking-wider font-semibold">
+                                    {item.postType}
+                                  </span>
+                                </div>
+                              )}
+
+                              {/* Top floating badges */}
+                              <div className="absolute top-2.5 left-2.5 flex items-center gap-1.5">
+                                {item.status === "scheduled" && (
+                                  <span className="text-[10px] bg-amber-500/95 backdrop-blur-xs text-white px-2 py-0.5 rounded-full font-bold flex items-center gap-1 shadow-xs">
+                                    <Clock className="h-3 w-3" /> Scheduled
+                                  </span>
+                                )}
+                                {item.status === "published" && (
+                                  <span className="text-[10px] bg-emerald-600/95 backdrop-blur-xs text-white px-2 py-0.5 rounded-full font-bold flex items-center gap-1 shadow-xs">
+                                    <CheckCircle2 className="h-3 w-3" /> Published
+                                  </span>
+                                )}
+                                {item.status === "failed" && (
+                                  <span className="text-[10px] bg-red-600/95 backdrop-blur-xs text-white px-2 py-0.5 rounded-full font-bold flex items-center gap-1 shadow-xs">
+                                    <XCircle className="h-3 w-3" /> Failed
+                                  </span>
+                                )}
+                              </div>
+
+                              {/* Top-right platform indicators */}
+                              <div className="absolute top-2.5 right-2.5 flex items-center gap-1 bg-black/60 backdrop-blur-xs p-1 rounded-lg text-white">
+                                {isFb && <FacebookIcon className="!w-3 !h-3" />}
+                                {isInsta && <InstagramIcon className="!w-3 !h-3" />}
+                              </div>
+                            </div>
+
+                            {/* Card Content with REAL Meta Stats */}
+                            <div className="p-3.5 flex-1 flex flex-col justify-between space-y-2.5">
+                              <div className="space-y-1.5">
+                                {/* Platform + Date Row */}
+                                <div className="flex items-center gap-1.5 text-[11px] text-slate-500 font-medium">
+                                  {isInsta ? (
+                                    <InstagramIcon className="!w-3.5 !h-3.5 text-pink-600" />
+                                  ) : (
+                                    <FacebookIcon className="!w-3.5 !h-3.5 text-blue-600" />
+                                  )}
+                                  <span className="font-semibold text-slate-700 truncate">{item.time}</span>
+                                  <span>•</span>
+                                  <span className="capitalize">{item.postType}</span>
+                                </div>
+
+                                {/* Caption */}
+                                <p className="text-xs text-slate-800 line-clamp-2 leading-relaxed">
+                                  {item.caption || (item.mediaUrl ? "Photo / Media Post" : "No caption provided")}
+                                </p>
+
+                                {/* REAL Engagement Metrics directly from Facebook/Instagram API */}
+                                <div className="flex items-center gap-3 pt-1 text-[11px] text-slate-600 font-medium">
+                                  <span className="flex items-center gap-1" title="Views">
+                                    👁️ {item.views ?? 0}
+                                  </span>
+                                  <span className="flex items-center gap-1 text-pink-700" title="Real Likes">
+                                    ❤️ {item.likes ?? 0}
+                                  </span>
+                                  <span className="flex items-center gap-1 text-blue-700" title="Real Comments">
+                                    💬 {item.comments ?? 0}
+                                  </span>
+                                </div>
+                              </div>
+
+                              {/* Error box if failed */}
+                              {item.errorMessage && (
+                                <div className="p-2 bg-red-50 border border-red-200 rounded-lg text-[10px] text-red-700">
+                                  {item.errorMessage}
+                                </div>
+                              )}
+
+                              {/* Action Buttons: Repost now, Edit, Open, Delete */}
+                              <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => handleRepost(item)}
+                                  className="flex-1 py-1.5 px-2 bg-purple-900 hover:bg-purple-950 text-white rounded-lg text-[11px] font-bold flex items-center justify-center gap-1 cursor-pointer transition shadow-2xs"
+                                >
+                                  <RefreshCw className="h-3 w-3" />
+                                  Repost now
+                                </button>
+
+                                <button
+                                  type="button"
+                                  disabled={isInsta}
+                                  onClick={(e) => !isInsta && handleEditPostCaption(item, e)}
+                                  className={`p-1.5 rounded-lg border transition ${
+                                    isInsta
+                                      ? "bg-slate-100 border-slate-200 text-slate-300 cursor-not-allowed opacity-50"
+                                      : "bg-white border-slate-200 hover:bg-slate-50 text-slate-700 cursor-pointer"
+                                  }`}
+                                  title={
+                                    isInsta
+                                      ? "Instagram API caption editing is restricted by Meta. Use 'Repost now' or edit in the Instagram app."
+                                      : "Edit Caption (Syncs directly to Facebook Page)"
+                                  }
+                                >
+                                  <Edit2 className="h-3.5 w-3.5" />
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (item.permalink) {
+                                      window.open(item.permalink, "_blank");
+                                    } else {
+                                      window.open(isInsta ? "https://instagram.com" : "https://facebook.com", "_blank");
+                                    }
+                                  }}
+                                  className="p-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-lg transition cursor-pointer"
+                                  title="View Live Post on Meta"
+                                >
+                                  <ExternalLink className="h-3.5 w-3.5" />
+                                </button>
+
+                                <button
+                                  type="button"
+                                  disabled={isInsta && item.status !== "scheduled"}
+                                  onClick={(e) => {
+                                    if (isInsta && item.status !== "scheduled") return;
+                                    handleDeletePost(item, e);
+                                  }}
+                                  className={`p-1.5 rounded-lg border transition ${
+                                    isInsta && item.status !== "scheduled"
+                                      ? "bg-slate-100 border-slate-200 text-slate-300 cursor-not-allowed opacity-50"
+                                      : "bg-white border-slate-200 hover:bg-red-50 hover:text-red-600 text-slate-500 cursor-pointer"
+                                  }`}
+                                  title={
+                                    isInsta && item.status !== "scheduled"
+                                      ? "Instagram live posts must be deleted directly inside the official Instagram app."
+                                      : "Delete Post (Deletes Live from Facebook & Queue)"
+                                  }
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
-
-                    <p className="text-xs text-slate-700 line-clamp-2">{item.caption}</p>
-
-                    {item.errorMessage && (
-                      <div className="p-2 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700 flex items-start gap-1.5">
-                        <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5 text-red-500" />
-                        <div>
-                          <strong>Error details:</strong> {item.errorMessage}
-                        </div>
-                      </div>
-                    )}
-
-                    <div className="flex items-center gap-3 text-[10px] text-slate-400 pt-0.5">
-                      <span>Target: {item.platforms.join(" & ")}</span>
-                      <span>•</span>
-                      <span>Media: {item.mediaCount} file(s)</span>
-                    </div>
-                  </div>
-                ))
+                  );
+                })()
               )}
             </div>
 
-            <div className="flex justify-end pt-3 border-t border-slate-100">
+            <div className="flex justify-between items-center pt-3 border-t border-slate-100">
+              <span className="text-xs text-slate-500 font-medium">
+                Total {filteredHistory.length} post(s) found
+              </span>
               <button
                 onClick={() => setShowHistoryModal(false)}
                 className="px-4 py-2 text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg cursor-pointer"
