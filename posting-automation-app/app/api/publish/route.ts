@@ -391,37 +391,64 @@ export async function POST(req: Request) {
         const creationId = containerData.id;
         console.log("Instagram Container Created. ID:", creationId);
 
-        // Wait a few seconds for video encoding if it's a reel
-        if (isVideo) {
-          console.log("Waiting for Instagram video processing...");
-          let ready = false;
-          let attempts = 0;
-          while (!ready && attempts < 10) {
-            await new Promise((resolve) => setTimeout(resolve, 3000));
-            attempts++;
-            const statusRes = await fetch(`https://graph.facebook.com/v21.0/${creationId}?fields=status_code&access_token=${igToken}`);
+        // Wait for Instagram to finish container processing (both for photos and reels/videos)
+        console.log("Waiting for Instagram container processing. ID:", creationId);
+        let ready = false;
+        let attempts = 0;
+        const maxAttempts = isVideo ? 20 : 10;
+        const delayMs = isVideo ? 3000 : 2000;
+
+        while (!ready && attempts < maxAttempts) {
+          await new Promise((resolve) => setTimeout(resolve, delayMs));
+          attempts++;
+          try {
+            const statusRes = await fetch(
+              `https://graph.facebook.com/v21.0/${creationId}?fields=status_code,status&access_token=${igToken}`
+            );
             const statusData = await statusRes.json();
+            console.log(`Instagram container ${creationId} status check #${attempts}:`, statusData.status_code || statusData);
             if (statusData.status_code === "FINISHED") {
               ready = true;
+              break;
             } else if (statusData.status_code === "ERROR") {
-              throw new Error("Instagram video processing failed.");
+              throw new Error("Instagram media processing failed on Meta's server.");
+            } else if (statusData.status_code === "EXPIRED") {
+              throw new Error("Instagram media container expired before it could be published.");
             }
+          } catch (statusErr: any) {
+            console.warn("Status check transient error:", statusErr.message);
           }
         }
 
-        // Step 2: Publish the Instagram Container
-        const publishRes = await fetch(`https://graph.facebook.com/v21.0/${igAccountId}/media_publish`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            creation_id: creationId,
-            access_token: igToken,
-          }),
-        });
-        const pubData = await publishRes.json();
-        if (pubData.error) {
-          console.error("Instagram Publish Error:", pubData.error);
-          throw new Error(pubData.error.message || "Failed to publish media on Instagram");
+        // Step 2: Publish the Instagram Container with automatic retry
+        let pubData: any = null;
+        let publishAttempts = 0;
+        while (publishAttempts < 3) {
+          publishAttempts++;
+          const publishRes = await fetch(`https://graph.facebook.com/v21.0/${igAccountId}/media_publish`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              creation_id: creationId,
+              access_token: igToken,
+            }),
+          });
+          pubData = await publishRes.json();
+          if (pubData.error) {
+            console.warn(`Instagram Publish Attempt #${publishAttempts} Error:`, pubData.error);
+            // If Media ID is not available (subcode 2207027), wait 3s and retry
+            if (pubData.error.message?.includes("Media ID") || pubData.error.error_subcode === 2207027) {
+              await new Promise((resolve) => setTimeout(resolve, 3000));
+              continue;
+            }
+            throw new Error(pubData.error.message || "Failed to publish media on Instagram");
+          } else if (pubData.id) {
+            break;
+          }
+        }
+
+        if (!pubData?.id) {
+          throw new Error(pubData?.error?.message || "Failed to publish media on Instagram after multiple attempts.");
         }
 
         console.log("Instagram Published Successfully! ID:", pubData.id);
