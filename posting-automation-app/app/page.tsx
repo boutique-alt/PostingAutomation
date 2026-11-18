@@ -163,11 +163,17 @@ export default function SocialComposer() {
     {
       id: "proj_pixel",
       name: "Pixel Solution",
-      connectMode: "facebook",
+      connectMode: "both",
       facebook: {
         pageName: "Pixel Solution",
         pageId: "247835161754285",
-        accessToken: "EAANoLwr4qnMBS5SakYKiwCLX9xGJ5tANZCDd43wfz40rEBZANycZBtCe53ZCiUvWMdTQ4VMNjS72xSrZAvtVNjZBBvl1yaOA5iKyYZCCDzLsQJZCVTmfZA4yO7Kb45IbpB0mRjO9X8ZAFJSsNTUmQOn5sBf3lVueaM4ZC1MCZC4y49oXWjY7ic6A0XnRi5bycnnfKyTZAtruX2QcZD",
+        accessToken: "EAANoLwr4qnMBTJsIlxf48ZCuROGzE4COvbQQICzlNssZAZCKiNiGWMnMoNgssi6P6sLiRKf1Fb6qXxCEPSRPtxFOsImzNVIOyPHHfliuvqrr5ZAiJdDgUboV0InLKXUqzz4goUjjWncrcfZBlvtw1P2bOGUZAdniweaASfjXPul0GgaAT42cEU1dZCDCSur2MCzWJUM7YpBwSZCHe8GlasGWRhhc2onvMzIklyIwVeIZD",
+        connected: true,
+      },
+      instagram: {
+        username: "pixelsolutiondigitalmarketing",
+        accountId: "17841465369787958",
+        accessToken: "EAANoLwr4qnMBTJsIlxf48ZCuROGzE4COvbQQICzlNssZAZCKiNiGWMnMoNgssi6P6sLiRKf1Fb6qXxCEPSRPtxFOsImzNVIOyPHHfliuvqrr5ZAiJdDgUboV0InLKXUqzz4goUjjWncrcfZBlvtw1P2bOGUZAdniweaASfjXPul0GgaAT42cEU1dZCDCSur2MCzWJUM7YpBwSZCHe8GlasGWRhhc2onvMzIklyIwVeIZD",
         connected: true,
       },
     },
