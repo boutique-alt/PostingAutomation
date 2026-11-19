@@ -137,9 +137,15 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // 4. Also fetch Scheduled Queue from local SQLite DB so scheduled posts show alongside live ones!
+    // 4. Also fetch Scheduled Queue from local SQLite DB for this client only!
     try {
-      const scheduledRows = db.prepare("SELECT * FROM posts WHERE status = 'scheduled' ORDER BY createdAt DESC").all() as any[];
+      const clientName = client?.name || "";
+      const scheduledRows = db
+        .prepare(
+          "SELECT * FROM posts WHERE status = 'scheduled' AND (clientId = ? OR projectName = ?) ORDER BY createdAt DESC"
+        )
+        .all(clientId, clientName) as any[];
+
       for (const s of scheduledRows) {
         // Only add if not already present from live Facebook scheduled_posts
         const alreadyInFeed = liveItems.some(
@@ -150,11 +156,14 @@ export async function GET(req: NextRequest) {
           liveItems.unshift({
             id: s.id,
             originalId: s.id,
+            clientId: s.clientId,
             platform: (JSON.parse(s.platforms || "[]")[0] || "facebook"),
             projectName: s.projectName,
             postType: s.postType,
             caption: s.caption,
             mediaUrl: s.mediaPath || null,
+            mediaPath: s.mediaPath || null,
+            mediaCount: s.mediaCount || 1,
             isVideo: s.postType === "reel",
             permalink: null,
             time: s.time,

@@ -32,7 +32,10 @@ import {
   XCircle,
   RotateCcw,
   Filter,
-  Maximize2
+  Maximize2,
+  Copy,
+  ChevronLeft,
+  ChevronRight
 } from "lucide-react";
 
 // Platform SVG Icons
@@ -84,6 +87,7 @@ export interface Project {
 
 export interface PostHistoryItem {
   id: string;
+  clientId?: string;
   projectName: string;
   platforms: string[];
   postType: string;
@@ -255,6 +259,19 @@ export default function SocialComposer() {
   // Scheduling
   const [isScheduled, setIsScheduled] = useState<boolean>(false);
   const [scheduleTime, setScheduleTime] = useState<string>("");
+  const [selectedScheduleDate, setSelectedScheduleDate] = useState<string>(() => {
+    const d = new Date(Date.now() + 60 * 60000);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  });
+  const [selectedScheduleHour, setSelectedScheduleHour] = useState<string>(() => {
+    const d = new Date(Date.now() + 60 * 60000);
+    return String(d.getHours()).padStart(2, "0");
+  });
+  const [selectedScheduleMinute, setSelectedScheduleMinute] = useState<string>(() => {
+    const d = new Date(Date.now() + 60 * 60000);
+    return String(Math.floor(d.getMinutes() / 5) * 5).padStart(2, "0");
+  });
+  const [calendarViewMonth, setCalendarViewMonth] = useState<Date>(() => new Date());
 
   const [isPublishing, setIsPublishing] = useState<boolean>(false);
   const [publishSuccess, setPublishSuccess] = useState<string | null>(null);
@@ -1380,14 +1397,20 @@ export default function SocialComposer() {
     setBulkPosts([]);
   };
 
-  const filteredHistory = postHistory.filter((item) => {
+  // Filter postHistory strictly for the active selected client/brand
+  const clientPostHistory = postHistory.filter((item) => {
+    if (!activeProject) return true;
+    return item.clientId === activeProject.id || item.projectName === activeProject.name;
+  });
+
+  const filteredHistory = clientPostHistory.filter((item) => {
     if (historyFilter === "all") return true;
     return item.status === historyFilter;
   });
 
-  const publishedCount = postHistory.filter((i) => i.status === "published").length;
-  const scheduledCount = postHistory.filter((i) => i.status === "scheduled").length;
-  const failedCount = postHistory.filter((i) => i.status === "failed").length;
+  const publishedCount = clientPostHistory.filter((i) => i.status === "published").length;
+  const scheduledCount = clientPostHistory.filter((i) => i.status === "scheduled").length;
+  const failedCount = clientPostHistory.filter((i) => i.status === "failed").length;
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col font-sans">
@@ -1434,6 +1457,11 @@ export default function SocialComposer() {
                       {activeProject.instagram && (
                         <span className="text-pink-600 inline-flex items-center" title="Instagram Connected">
                           <InstagramIcon className="!w-4 !h-4" />
+                        </span>
+                      )}
+                      {activeProject.gbp && (
+                        <span className="inline-flex items-center" title="Google Business Profile Connected">
+                          <GoogleBusinessIcon className="!w-4 !h-4" />
                         </span>
                       )}
                     </div>
@@ -1489,6 +1517,11 @@ export default function SocialComposer() {
                             {proj.instagram && (
                               <span className="text-pink-600 inline-flex items-center" title="Instagram">
                                 <InstagramIcon className="!w-3.5 !h-3.5" />
+                              </span>
+                            )}
+                            {proj.gbp && (
+                              <span className="inline-flex items-center" title="Google Business Profile">
+                                <GoogleBusinessIcon className="!w-3.5 !h-3.5" />
                               </span>
                             )}
                           </div>
@@ -1577,6 +1610,11 @@ export default function SocialComposer() {
                           <InstagramIcon className="!w-3.5 !h-3.5" />
                         </span>
                       )}
+                      {activeProject.gbp && (
+                        <span className="inline-flex items-center" title="Google Business Profile Connected">
+                          <GoogleBusinessIcon className="!w-3.5 !h-3.5" />
+                        </span>
+                      )}
                     </div>
                   </div>
                 ) : (
@@ -1633,6 +1671,11 @@ export default function SocialComposer() {
                               <InstagramIcon className="!w-3.5 !h-3.5" />
                             </span>
                           )}
+                          {proj.gbp && (
+                            <span className="inline-flex items-center" title="Google Business Profile">
+                              <GoogleBusinessIcon className="!w-3.5 !h-3.5" />
+                            </span>
+                          )}
                         </div>
                       </button>
                     ))
@@ -1648,39 +1691,6 @@ export default function SocialComposer() {
       <main className="flex-1 max-w-6xl w-full mx-auto p-3 sm:p-6 pb-24 sm:pb-6 grid grid-cols-1 lg:grid-cols-12 gap-5">
         {/* Left Column: Post Composer (7 Cols) */}
         <div className="lg:col-span-7 flex flex-col gap-5">
-          {/* Composer Mode Switcher: Single Post vs Bulk Multi-Day Scheduler */}
-          <div className="bg-white border border-slate-200 rounded-xl p-2 shadow-xs flex items-center justify-between gap-2">
-            <button
-              type="button"
-              onClick={() => setComposerMode("single")}
-              className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
-                composerMode === "single"
-                  ? "bg-blue-600 text-white shadow-xs"
-                  : "bg-slate-50 text-slate-600 hover:bg-slate-100"
-              }`}
-            >
-              <Send className="h-3.5 w-3.5" />
-              Create Post
-            </button>
-            <button
-              type="button"
-              onClick={() => setComposerMode("bulk")}
-              className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
-                composerMode === "bulk"
-                  ? "bg-indigo-600 text-white shadow-xs"
-                  : "bg-slate-50 text-slate-600 hover:bg-slate-100"
-              }`}
-            >
-              <Calendar className="h-3.5 w-3.5" />
-              Multi Post Schedule
-              {bulkPosts.length > 0 && (
-                <span className="text-[10px] bg-white/20 text-white px-1.5 py-0.2 rounded-full font-semibold">
-                  {bulkPosts.length}
-                </span>
-              )}
-            </button>
-          </div>
-
           {/* Step 1: Target Accounts */}
           <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs">
             <div className="flex items-center justify-between mb-3">
@@ -1820,9 +1830,7 @@ export default function SocialComposer() {
             </div>
           </div>
 
-          {composerMode === "single" ? (
-            <>
-              {/* Step 2: Content Type Selection */}
+          {/* Step 2: Content Type Selection */}
               <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs">
             <div className="flex items-center justify-between mb-3">
               <label className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-2">
@@ -2013,49 +2021,297 @@ export default function SocialComposer() {
             </div>
           </div>
 
-          {/* Step 4: Schedule & Publish Button */}
+          {/* Step 4: Schedule or Publish */}
           <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs space-y-4">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Calendar className="h-4 w-4 text-blue-600" />
-                <span className="text-xs font-semibold text-slate-700">Schedule Post (Optional)</span>
-              </div>
-              <input
-                type="checkbox"
-                checked={isScheduled}
-                onChange={(e) => setIsScheduled(e.target.checked)}
-                className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-              />
-            </div>
-
-            {isScheduled && (
-              <div className="pt-1 space-y-2.5">
-                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3">
-                  <input
-                    type="datetime-local"
-                    value={scheduleTime}
-                    min={(() => {
-                      const d = new Date(Date.now() + 12 * 60000);
+              <label className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-2">
+                <span className="h-5 w-5 rounded-full bg-blue-600 text-white flex items-center justify-center text-[11px] font-bold">4</span>
+                Publishing Time
+              </label>
+              <div className="flex items-center gap-2 bg-slate-100 p-1 rounded-lg">
+                <button
+                  type="button"
+                  onClick={() => setIsScheduled(false)}
+                  className={`px-3 py-1 rounded-md text-xs font-bold transition cursor-pointer ${
+                    !isScheduled
+                      ? "bg-white text-blue-700 shadow-xs"
+                      : "text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  Publish Now
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsScheduled(true);
+                    if (!scheduleTime) {
+                      const d = new Date(Date.now() + 60 * 60000); // default 1 hour later
                       const year = d.getFullYear();
                       const month = String(d.getMonth() + 1).padStart(2, "0");
                       const day = String(d.getDate()).padStart(2, "0");
                       const hours = String(d.getHours()).padStart(2, "0");
                       const mins = String(d.getMinutes()).padStart(2, "0");
-                      return `${year}-${month}-${day}T${hours}:${mins}`;
-                    })()}
-                    onChange={(e) => setScheduleTime(e.target.value)}
-                    className="w-full sm:w-auto bg-white border border-slate-300 text-xs text-slate-800 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500 font-medium"
-                  />
-                  <span className="text-[11px] text-slate-500 flex items-center gap-1 font-medium">
-                    <Clock className="h-3.5 w-3.5 text-blue-600" /> Auto-publishes at scheduled time
-                  </span>
+                      setScheduleTime(`${year}-${month}-${day}T${hours}:${mins}`);
+                    }
+                  }}
+                  className={`px-3 py-1 rounded-md text-xs font-bold transition flex items-center gap-1 cursor-pointer ${
+                    isScheduled
+                      ? "bg-white text-indigo-700 shadow-xs"
+                      : "text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  <Calendar className="h-3 w-3" />
+                  Schedule Later
+                </button>
+              </div>
+            </div>
+
+            {isScheduled && (
+              <div className="p-4 bg-white border border-indigo-200 rounded-2xl shadow-xs space-y-4">
+                {/* Header with Title and Quick Offset Buttons */}
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                  <div className="flex items-center gap-2">
+                    <div className="p-1.5 bg-indigo-50 text-indigo-600 rounded-lg">
+                      <Calendar className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-slate-900">Schedule Date & Time</h4>
+                      <p className="text-[10px] text-slate-500">Pick any date and time up to 2.5 months ahead</p>
+                    </div>
+                  </div>
+
+                  {/* Quick Select Presets */}
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const d = new Date(Date.now() + 60 * 60000); // 1 hr later
+                        const y = d.getFullYear();
+                        const m = String(d.getMonth() + 1).padStart(2, "0");
+                        const dateStr = String(d.getDate()).padStart(2, "0");
+                        const hh = String(d.getHours()).padStart(2, "0");
+                        const mm = String(Math.floor(d.getMinutes() / 5) * 5).padStart(2, "0");
+                        setSelectedScheduleDate(`${y}-${m}-${dateStr}`);
+                        setSelectedScheduleHour(hh);
+                        setSelectedScheduleMinute(mm);
+                        setScheduleTime(`${y}-${m}-${dateStr}T${hh}:${mm}`);
+                        setCalendarViewMonth(new Date(y, d.getMonth(), 1));
+                      }}
+                      className="px-2 py-1 bg-slate-50 hover:bg-slate-100 text-slate-600 rounded-md text-[10px] font-semibold transition border border-slate-200 cursor-pointer"
+                    >
+                      In 1 hour
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const d = new Date(Date.now() + 24 * 3600000); // tomorrow
+                        const y = d.getFullYear();
+                        const m = String(d.getMonth() + 1).padStart(2, "0");
+                        const dateStr = String(d.getDate()).padStart(2, "0");
+                        setSelectedScheduleDate(`${y}-${m}-${dateStr}`);
+                        setScheduleTime(`${y}-${m}-${dateStr}T${selectedScheduleHour}:${selectedScheduleMinute}`);
+                        setCalendarViewMonth(new Date(y, d.getMonth(), 1));
+                      }}
+                      className="px-2 py-1 bg-slate-50 hover:bg-slate-100 text-slate-600 rounded-md text-[10px] font-semibold transition border border-slate-200 cursor-pointer"
+                    >
+                      Tomorrow
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const d = new Date(Date.now() + 7 * 24 * 3600000); // 7 days later
+                        const y = d.getFullYear();
+                        const m = String(d.getMonth() + 1).padStart(2, "0");
+                        const dateStr = String(d.getDate()).padStart(2, "0");
+                        setSelectedScheduleDate(`${y}-${m}-${dateStr}`);
+                        setScheduleTime(`${y}-${m}-${dateStr}T${selectedScheduleHour}:${selectedScheduleMinute}`);
+                        setCalendarViewMonth(new Date(y, d.getMonth(), 1));
+                      }}
+                      className="px-2 py-1 bg-slate-50 hover:bg-slate-100 text-slate-600 rounded-md text-[10px] font-semibold transition border border-slate-200 cursor-pointer"
+                    >
+                      In 7 days
+                    </button>
+                  </div>
                 </div>
 
-                {/* Helpful Meta Guideline Note */}
-                <div className="p-2.5 bg-blue-50/70 border border-blue-200 rounded-lg text-[11px] text-blue-900 flex items-start gap-2">
-                  <Info className="h-4 w-4 text-blue-600 flex-shrink-0 mt-0.5" />
-                  <div>
-                    <span className="font-bold">Facebook Requirement:</span> Schedule time must be <strong>at least 10 minutes in the future</strong> (e.g. at least 15–20 mins later) and up to 75 days in advance.
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+                  {/* Left Column: Clean Custom Calendar Grid */}
+                  <div className="md:col-span-7 bg-slate-50/70 p-3 rounded-xl border border-slate-200/80">
+                    {/* Month / Year Navigator */}
+                    <div className="flex items-center justify-between mb-2.5 px-1">
+                      <span className="text-xs font-bold text-slate-800">
+                        {calendarViewMonth.toLocaleDateString("en-US", { month: "long", year: "numeric" })}
+                      </span>
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCalendarViewMonth(new Date(calendarViewMonth.getFullYear(), calendarViewMonth.getMonth() - 1, 1));
+                          }}
+                          className="p-1 hover:bg-white rounded-md text-slate-600 transition border border-transparent hover:border-slate-200 cursor-pointer"
+                          title="Previous Month"
+                        >
+                          <ChevronLeft className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCalendarViewMonth(new Date(calendarViewMonth.getFullYear(), calendarViewMonth.getMonth() + 1, 1));
+                          }}
+                          className="p-1 hover:bg-white rounded-md text-slate-600 transition border border-transparent hover:border-slate-200 cursor-pointer"
+                          title="Next Month"
+                        >
+                          <ChevronRight className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Day Names Header */}
+                    <div className="grid grid-cols-7 gap-1 text-center mb-1">
+                      {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map((dayName, idx) => (
+                        <div key={idx} className="text-[10px] font-bold text-slate-400 py-0.5">
+                          {dayName}
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Days Cells */}
+                    <div className="grid grid-cols-7 gap-1">
+                      {(() => {
+                        const year = calendarViewMonth.getFullYear();
+                        const month = calendarViewMonth.getMonth();
+                        const firstDayOfWeek = new Date(year, month, 1).getDay();
+                        const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+                        const today = new Date();
+                        const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+
+                        const cells = [];
+                        // Blank prefix days
+                        for (let i = 0; i < firstDayOfWeek; i++) {
+                          cells.push(<div key={`blank-${i}`} className="h-7" />);
+                        }
+
+                        // Days of current month
+                        for (let day = 1; day <= daysInMonth; day++) {
+                          const dateObj = new Date(year, month, day);
+                          const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+                          const isSelected = selectedScheduleDate === dateStr;
+                          const isToday = todayStr === dateStr;
+                          
+                          // Past dates disabled (before today)
+                          const isPast = dateObj.setHours(23, 59, 59, 999) < today.getTime();
+                          // Exceeds 75 days disabled
+                          const maxDate = new Date(Date.now() + 75 * 24 * 3600000);
+                          const isTooFar = dateObj.getTime() > maxDate.getTime();
+                          const isDisabled = isPast || isTooFar;
+
+                          cells.push(
+                            <button
+                              key={dateStr}
+                              type="button"
+                              disabled={isDisabled}
+                              onClick={() => {
+                                setSelectedScheduleDate(dateStr);
+                                setScheduleTime(`${dateStr}T${selectedScheduleHour}:${selectedScheduleMinute}`);
+                              }}
+                              className={`h-7 rounded-lg text-xs font-semibold flex items-center justify-center transition cursor-pointer ${
+                                isSelected
+                                  ? "bg-indigo-600 text-white font-bold shadow-xs"
+                                  : isToday
+                                  ? "bg-indigo-100/70 text-indigo-700 font-bold hover:bg-indigo-200/80"
+                                  : isDisabled
+                                  ? "text-slate-300 cursor-not-allowed"
+                                  : "text-slate-700 hover:bg-white hover:shadow-2xs"
+                              }`}
+                            >
+                              {day}
+                            </button>
+                          );
+                        }
+
+                        return cells;
+                      })()}
+                    </div>
+                  </div>
+
+                  {/* Right Column: Time Pickers & Confirmation Box */}
+                  <div className="md:col-span-5 flex flex-col justify-between space-y-3">
+                    <div className="space-y-2">
+                      <label className="text-[11px] font-bold text-slate-700 flex items-center gap-1">
+                        <Clock className="h-3.5 w-3.5 text-indigo-600" />
+                        Select Time
+                      </label>
+                      <div className="flex items-center gap-2">
+                        {/* Hours */}
+                        <div className="flex-1">
+                          <span className="block text-[9px] font-semibold text-slate-400 mb-1">Hour</span>
+                          <select
+                            value={selectedScheduleHour}
+                            onChange={(e) => {
+                              setSelectedScheduleHour(e.target.value);
+                              setScheduleTime(`${selectedScheduleDate}T${e.target.value}:${selectedScheduleMinute}`);
+                            }}
+                            className="w-full bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-800 px-2.5 py-2 focus:ring-2 focus:ring-indigo-500 focus:outline-none shadow-2xs"
+                          >
+                            {Array.from({ length: 24 }).map((_, i) => {
+                              const val = String(i).padStart(2, "0");
+                              const hour12 = i % 12 === 0 ? 12 : i % 12;
+                              const ampm = i < 12 ? "AM" : "PM";
+                              return (
+                                <option key={val} value={val}>
+                                  {val}:00 ({hour12} {ampm})
+                                </option>
+                              );
+                            })}
+                          </select>
+                        </div>
+
+                        {/* Minutes */}
+                        <div className="flex-1">
+                          <span className="block text-[9px] font-semibold text-slate-400 mb-1">Minute</span>
+                          <select
+                            value={selectedScheduleMinute}
+                            onChange={(e) => {
+                              setSelectedScheduleMinute(e.target.value);
+                              setScheduleTime(`${selectedScheduleDate}T${selectedScheduleHour}:${e.target.value}`);
+                            }}
+                            className="w-full bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-800 px-2.5 py-2 focus:ring-2 focus:ring-indigo-500 focus:outline-none shadow-2xs"
+                          >
+                            {["00", "05", "10", "15", "20", "25", "30", "35", "40", "45", "50", "55"].map((m) => (
+                              <option key={m} value={m}>
+                                :{m}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Summary Card */}
+                    <div className="p-3 bg-indigo-50/80 border border-indigo-100/90 rounded-xl space-y-1">
+                      <span className="text-[10px] text-indigo-500 font-bold uppercase tracking-wider block">
+                        Scheduled for
+                      </span>
+                      <div className="text-xs font-bold text-indigo-950">
+                        {new Date(`${selectedScheduleDate}T${selectedScheduleHour}:${selectedScheduleMinute}`).toLocaleDateString(
+                          "en-US",
+                          { weekday: "short", month: "short", day: "numeric", year: "numeric" }
+                        )}
+                      </div>
+                      <div className="text-xs font-semibold text-indigo-700 flex items-center gap-1">
+                        <Clock className="h-3 w-3" />
+                        {new Date(`${selectedScheduleDate}T${selectedScheduleHour}:${selectedScheduleMinute}`).toLocaleTimeString(
+                          [],
+                          { hour: "2-digit", minute: "2-digit" }
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="text-[10px] text-slate-400 flex items-center gap-1">
+                      <Info className="h-3 w-3 text-indigo-500 flex-shrink-0" />
+                      <span>Meta minimum 10m advance notice</span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -2072,365 +2328,26 @@ export default function SocialComposer() {
               type="button"
               disabled={isPublishing || isCheckingRatio}
               onClick={handlePublish}
-              className="w-full py-3.5 px-4 bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm rounded-xl shadow-sm flex items-center justify-center gap-2 transition disabled:opacity-50 cursor-pointer"
+              className={`w-full py-3.5 px-4 font-bold text-sm rounded-xl shadow-xs flex items-center justify-center gap-2 transition disabled:opacity-50 cursor-pointer ${
+                isScheduled
+                  ? "bg-indigo-600 hover:bg-indigo-700 text-white"
+                  : "bg-blue-600 hover:bg-blue-700 text-white"
+              }`}
             >
               {isPublishing ? (
                 <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              ) : isScheduled ? (
+                <Calendar className="h-4 w-4" />
               ) : (
                 <Send className="h-4 w-4" />
               )}
               {isPublishing
-                ? "Publishing to Meta..."
+                ? "Processing with Meta..."
                 : isScheduled
-                ? "Confirm & Schedule Post"
+                ? "Schedule Post"
                 : "Publish Now"}
             </button>
           </div>
-        </>
-      ) : (
-        /* BULK MULTI-POST SCHEDULER VIEW */
-        <div className="space-y-4">
-          <div className="bg-gradient-to-r from-indigo-50 to-purple-50 border border-indigo-200 rounded-2xl p-4 sm:p-5 shadow-xs space-y-3.5">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-              <div>
-                <h3 className="text-xs sm:text-sm font-bold text-indigo-950 flex items-center gap-1.5">
-                  <Calendar className="h-4 w-4 text-indigo-600" />
-                  Multi Post & Weekly Schedule Planner
-                </h3>
-                <p className="text-[11px] text-indigo-700 mt-0.5">
-                  Plan an entire week of posts with 1 click, or add individual post slots.
-                </p>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => handleGenerateFullWeek(dailyPostTime)}
-                  className="px-3 py-1.5 bg-purple-700 hover:bg-purple-800 active:scale-95 text-white text-xs font-bold rounded-xl transition flex items-center gap-1.5 cursor-pointer shadow-xs"
-                  title="Generate a full 7-day schedule with posts every day at the same fixed time"
-                >
-                  <Sparkles className="h-3.5 w-3.5" />
-                  <span>Plan Full Week (7 Days)</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    const nextDays = bulkPosts.length;
-                    const [h, m] = dailyPostTime.split(":").map(Number);
-                    const d = new Date();
-                    d.setDate(d.getDate() + nextDays + 1);
-                    d.setHours(h || 18, m || 0, 0, 0);
-                    const newTime = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}T${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-                    setBulkPosts((prev) => [
-                      ...prev,
-                      {
-                        id: "bulk_" + Date.now(),
-                        postType: "poster",
-                        caption: "",
-                        mediaFile: null,
-                        scheduleTime: newTime,
-                        isCustomScheduled: true,
-                      },
-                    ]);
-                  }}
-                  className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white text-xs font-bold rounded-xl transition flex items-center gap-1 cursor-pointer shadow-xs"
-                >
-                  <PlusCircle className="h-3.5 w-3.5" />
-                  Add Post Slot
-                </button>
-              </div>
-            </div>
-
-            {/* Same Daily Time Controller */}
-            <div className="bg-white/90 backdrop-blur-xs border border-indigo-100 rounded-xl p-2.5 flex flex-wrap items-center justify-between gap-3 text-xs">
-              <div className="flex items-center gap-2 text-indigo-950 font-semibold">
-                <Clock className="h-4 w-4 text-indigo-600 flex-shrink-0" />
-                <span>Daily Fixed Time:</span>
-                <input
-                  type="time"
-                  value={dailyPostTime}
-                  onChange={(e) => {
-                    const newT = e.target.value;
-                    setDailyPostTime(newT);
-                    if (bulkPosts.length > 0) {
-                      handleApplyTimeToAllSlots(newT);
-                    }
-                  }}
-                  className="bg-indigo-50 border border-indigo-200 text-indigo-950 rounded-lg px-2 py-1 font-bold focus:outline-none focus:ring-2 focus:ring-indigo-400"
-                />
-                <span className="text-[11px] text-slate-500 font-normal hidden sm:inline">
-                  (Automatically applies to every day)
-                </span>
-              </div>
-
-              {bulkPosts.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => handleApplyTimeToAllSlots(dailyPostTime)}
-                  className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 hover:underline flex items-center gap-1 cursor-pointer"
-                >
-                  ⚡ Sync {dailyPostTime} to all {bulkPosts.length} days
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* List of Bulk Post Cards or Empty State */}
-          {bulkPosts.length === 0 ? (
-            <div className="bg-white border-2 border-dashed border-indigo-200 rounded-2xl p-8 text-center space-y-4">
-              <div className="h-12 w-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center mx-auto">
-                <Calendar className="h-6 w-6" />
-              </div>
-              <div>
-                <h4 className="text-sm font-bold text-slate-900">Multi Post & Weekly Schedule Planner</h4>
-                <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
-                  Easily schedule your content for the entire week at the same daily time, or add slots manually.
-                </p>
-              </div>
-              <div className="flex flex-wrap items-center justify-center gap-2.5">
-                <button
-                  type="button"
-                  onClick={() => handleGenerateFullWeek(dailyPostTime)}
-                  className="px-4 py-2.5 bg-purple-700 hover:bg-purple-800 text-white text-xs font-bold rounded-xl transition inline-flex items-center gap-1.5 shadow-sm cursor-pointer"
-                >
-                  <Sparkles className="h-4 w-4" />
-                  Plan Full Week (7 Days at {dailyPostTime})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const d = new Date(Date.now() + 2 * 3600000);
-                    const newTime = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}T${String(d.getHours()).padStart(2, "0")}:00`;
-                    setBulkPosts([
-                      {
-                        id: "bulk_" + Date.now(),
-                        postType: "poster",
-                        caption: "",
-                        mediaFile: null,
-                        scheduleTime: newTime,
-                        isCustomScheduled: true,
-                      },
-                    ]);
-                  }}
-                  className="px-4 py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-bold rounded-xl transition inline-flex items-center gap-1.5 cursor-pointer"
-                >
-                  <PlusCircle className="h-4 w-4" />
-                  Add 1 Post Slot
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {bulkPosts.map((postCard, idx) => {
-                const postDate = new Date(postCard.scheduleTime);
-                const isDateValid = !isNaN(postDate.getTime());
-                const dayLabel = isDateValid
-                  ? postDate.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })
-                  : `Day ${idx + 1}`;
-                const timeLabel = isDateValid
-                  ? postDate.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-                  : "";
-
-                return (
-                  <div
-                    key={postCard.id}
-                    className="bg-white border border-slate-200 rounded-xl p-4 sm:p-5 shadow-xs space-y-3.5 relative"
-                  >
-                    <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
-                      <div className="flex items-center gap-2.5">
-                        <span className="h-7 w-7 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-xs font-bold">
-                          {idx + 1}
-                        </span>
-                        <div>
-                          <span className="text-xs font-bold text-slate-900 block leading-tight">
-                            {dayLabel} {timeLabel ? `• ${timeLabel}` : ""}
-                          </span>
-                          <span className="text-[10px] text-indigo-600 font-semibold">
-                            Day {idx + 1} of {bulkPosts.length}
-                          </span>
-                        </div>
-                      </div>
-
-                    <div className="flex items-center gap-2">
-                      <select
-                        value={postCard.postType}
-                        onChange={(e) => {
-                          const val = e.target.value as "poster" | "reel";
-                          setBulkPosts((prev) =>
-                            prev.map((p) => (p.id === postCard.id ? { ...p, postType: val } : p))
-                          );
-                        }}
-                        className="bg-slate-50 border border-slate-200 rounded-lg text-[11px] font-semibold text-slate-700 px-2 py-1 focus:outline-none"
-                      >
-                        <option value="poster">Poster (1:1 / 4:5)</option>
-                        <option value="reel">Reels (9:16)</option>
-                      </select>
-
-                      <button
-                        type="button"
-                        onClick={() => setBulkPosts((prev) => prev.filter((p) => p.id !== postCard.id))}
-                        className="p-1 text-slate-400 hover:text-red-600 transition cursor-pointer"
-                        title="Remove this post slot"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </div>
-
-                {/* Schedule Date & Time Picker */}
-                <div className="bg-slate-50 border border-slate-200/80 rounded-lg p-2.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-                  <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700">
-                    <Clock className="h-4 w-4 text-indigo-600" />
-                    <span>Publish Time:</span>
-                  </div>
-                  <input
-                    type="datetime-local"
-                    value={postCard.scheduleTime}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      setBulkPosts((prev) =>
-                        prev.map((p) => (p.id === postCard.id ? { ...p, scheduleTime: val } : p))
-                      );
-                    }}
-                    className="bg-white border border-slate-300 text-xs text-slate-900 rounded-md px-2.5 py-1.5 font-medium focus:outline-none focus:border-indigo-500"
-                  />
-                </div>
-
-                {/* Media Upload for this post card */}
-                <div>
-                  {postCard.mediaFile ? (
-                    <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-lg flex items-center justify-between gap-3">
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <div className="h-10 w-10 rounded-md overflow-hidden bg-white border border-slate-200 shrink-0">
-                          {postCard.mediaFile.type === "video" ? (
-                            <video src={postCard.mediaFile.url} className="h-full w-full object-cover" />
-                          ) : (
-                            <img src={postCard.mediaFile.url} alt="file" className="h-full w-full object-cover" />
-                          )}
-                        </div>
-                        <div className="min-w-0">
-                          <span className="text-xs font-bold text-slate-800 truncate block">
-                            {postCard.mediaFile.name}
-                          </span>
-                          <span className="text-[10px] text-slate-500">
-                            {postCard.mediaFile.ratioLabel}
-                          </span>
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setBulkPosts((prev) =>
-                            prev.map((p) => (p.id === postCard.id ? { ...p, mediaFile: null } : p))
-                          )
-                        }
-                        className="p-1 text-slate-400 hover:text-red-600 transition"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="border border-dashed border-slate-300 hover:border-indigo-400 rounded-lg p-3 text-center bg-slate-50/50">
-                      <input
-                        type="file"
-                        id={`bulk_media_${postCard.id}`}
-                        accept={postCard.postType === "reel" ? "video/*" : "image/*,video/*"}
-                        onChange={async (e) => {
-                          const f = e.target.files?.[0];
-                          if (!f) return;
-                          const isVid = f.type.startsWith("video");
-                          const u = URL.createObjectURL(f);
-                          const { width, height } = await new Promise<{ width: number; height: number }>((resolve) => {
-                            if (isVid) {
-                              const v = document.createElement("video");
-                              v.preload = "metadata";
-                              v.onloadedmetadata = () => resolve({ width: v.videoWidth || 1080, height: v.videoHeight || 1920 });
-                              v.src = u;
-                            } else {
-                              const img = new Image();
-                              img.onload = () => resolve({ width: img.naturalWidth || 1080, height: img.naturalHeight || 1080 });
-                              img.src = u;
-                            }
-                          });
-                          const validation = validateAspectRatio(width, height, isVid ? "video" : "image", postCard.postType);
-                          const mItem: MediaFileItem = {
-                            url: u,
-                            name: f.name,
-                            file: f,
-                            type: isVid ? "video" : "image",
-                            width,
-                            height,
-                            aspectRatio: width / height,
-                            ratioLabel: validation.label,
-                            isValidRatio: validation.isValid,
-                            ratioWarning: validation.warning,
-                          };
-                          setBulkPosts((prev) =>
-                            prev.map((p) => (p.id === postCard.id ? { ...p, mediaFile: mItem } : p))
-                          );
-                        }}
-                        className="hidden"
-                      />
-                      <label
-                        htmlFor={`bulk_media_${postCard.id}`}
-                        className="cursor-pointer text-xs font-semibold text-indigo-600 hover:text-indigo-800 flex items-center justify-center gap-1.5"
-                      >
-                        <ImageIcon className="h-4 w-4" />
-                        Select Photo / Video for Post {idx + 1}
-                      </label>
-                    </div>
-                  )}
-                </div>
-
-                {/* Caption for this post card */}
-                <textarea
-                  rows={2}
-                  value={postCard.caption}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    setBulkPosts((prev) =>
-                      prev.map((p) => (p.id === postCard.id ? { ...p, caption: val } : p))
-                    );
-                  }}
-                  placeholder={`Caption for Post ${idx + 1}...`}
-                  className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-indigo-500 font-medium"
-                />
-              </div>
-            );
-          })}
-          </div>
-          )}
-
-          {/* Submit All Bulk Posts Button */}
-          <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs space-y-3">
-            {bulkSchedulingStatus && (
-              <div className="p-3 bg-indigo-50 border border-indigo-200 rounded-lg text-indigo-800 text-xs flex items-center gap-2">
-                <div className="h-4 w-4 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin shrink-0" />
-                <span className="font-semibold">{bulkSchedulingStatus}</span>
-              </div>
-            )}
-
-            <button
-              type="button"
-              disabled={isPublishing || bulkPosts.length === 0}
-              onClick={handleBulkSchedule}
-              className="w-full py-3.5 px-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm rounded-xl shadow-sm flex items-center justify-center gap-2 transition disabled:opacity-50 cursor-pointer"
-            >
-              {isPublishing ? (
-                <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              ) : (
-                <Calendar className="h-4 w-4" />
-              )}
-              {isPublishing
-                ? "Processing Queue..."
-                : bulkPosts.length === 0
-                ? "Add a post slot above to schedule"
-                : `Schedule All (${bulkPosts.length}) Posts in Queue`}
-            </button>
-          </div>
-        </div>
-      )}
         </div>
 
         {/* Right Column: Live Mockup Preview (5 Cols) */}
@@ -2544,7 +2461,7 @@ export default function SocialComposer() {
                       : "bg-slate-100 text-slate-600 hover:bg-slate-200"
                   }`}
                 >
-                  All Posts ({livePosts.length > 0 ? livePosts.length : postHistory.length})
+                  All Posts ({livePosts.length > 0 ? livePosts.length : clientPostHistory.length})
                 </button>
 
                 <button
@@ -2605,8 +2522,15 @@ export default function SocialComposer() {
                 </div>
               ) : (
                 (() => {
-                  const displayList = livePosts.length > 0 ? livePosts : postHistory;
+                  const displayList = livePosts.length > 0 ? livePosts : clientPostHistory;
                   const finalFiltered = displayList.filter((item) => {
+                    // Strictly match active client
+                    if (activeProject) {
+                      const matchesClient =
+                        (!item.clientId || item.clientId === activeProject.id) &&
+                        (!item.projectName || item.projectName === activeProject.name);
+                      if (!matchesClient) return false;
+                    }
                     if (historyFilter === "all") return true;
                     return item.status === historyFilter;
                   });
@@ -2666,7 +2590,7 @@ export default function SocialComposer() {
                               )}
 
                               {/* Top floating badges */}
-                              <div className="absolute top-2.5 left-2.5 flex items-center gap-1.5">
+                              <div className="absolute top-2.5 left-2.5 flex items-center gap-1.5 z-10">
                                 {item.status === "scheduled" && (
                                   <span className="text-[10px] bg-amber-500/95 backdrop-blur-xs text-white px-2 py-0.5 rounded-full font-bold flex items-center gap-1 shadow-xs">
                                     <Clock className="h-3 w-3" /> Scheduled
@@ -2680,6 +2604,16 @@ export default function SocialComposer() {
                                 {item.status === "failed" && (
                                   <span className="text-[10px] bg-red-600/95 backdrop-blur-xs text-white px-2 py-0.5 rounded-full font-bold flex items-center gap-1 shadow-xs">
                                     <XCircle className="h-3 w-3" /> Failed
+                                  </span>
+                                )}
+                                {item.postType === "carousel" && (
+                                  <span className="text-[10px] bg-black/70 backdrop-blur-xs text-white px-1.5 py-0.5 rounded-full font-semibold flex items-center gap-1 shadow-xs">
+                                    <Copy className="h-2.5 w-2.5" /> Carousel ({item.mediaCount || 2})
+                                  </span>
+                                )}
+                                {isVideo && (
+                                  <span className="text-[10px] bg-indigo-600/90 backdrop-blur-xs text-white px-1.5 py-0.5 rounded-full font-semibold flex items-center gap-1 shadow-xs">
+                                    <Video className="h-2.5 w-2.5" /> Reel
                                   </span>
                                 )}
                               </div>
@@ -2839,61 +2773,81 @@ export default function SocialComposer() {
               </button>
             </div>
 
-            <div className="overflow-y-auto flex-1 divide-y divide-slate-100">
+            <div className="overflow-y-auto flex-1 divide-y divide-slate-100 pr-1">
               {projects.map((client) => (
-                <div key={client.id} className="py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-4">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h4 className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
-                        {client.name}
+                <div key={client.id} className="py-3 flex flex-col gap-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <h4 className="text-xs sm:text-sm font-bold text-slate-900 truncate">
+                          {client.name}
+                        </h4>
+                        <div className="flex items-center gap-1">
+                          {client.facebook && (
+                            <span className="text-blue-600 inline-flex items-center" title="Facebook Connected">
+                              <FacebookIcon className="!w-3.5 !h-3.5" />
+                            </span>
+                          )}
+                          {client.instagram && (
+                            <span className="text-pink-600 inline-flex items-center" title="Instagram Connected">
+                              <InstagramIcon className="!w-3.5 !h-3.5" />
+                            </span>
+                          )}
+                          {client.gbp && (
+                            <span className="inline-flex items-center" title="Google Business Profile Connected">
+                              <GoogleBusinessIcon className="!w-3.5 !h-3.5" />
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-[9px] bg-slate-100 text-slate-600 border border-slate-200 px-1.5 py-0.5 rounded font-mono uppercase">
+                          {client.connectMode}
+                        </span>
+                      </div>
+
+                      {/* Client handles / IDs */}
+                      <div className="flex flex-col sm:flex-row sm:flex-wrap items-start sm:items-center gap-1 sm:gap-2.5 text-[11px] text-slate-500 mt-1.5">
                         {client.facebook && (
-                          <span className="text-blue-600 inline-flex items-center" title="Facebook Connected">
-                            <FacebookIcon className="!w-3.5 !h-3.5" />
+                          <span className="flex items-center gap-1 text-blue-700 break-all">
+                            <FacebookIcon className="!w-3 !h-3 flex-shrink-0" />
+                            <span>{client.facebook.pageName}</span>
+                            <span className="text-slate-400 text-[10px]">(ID: {client.facebook.pageId || "N/A"})</span>
                           </span>
                         )}
                         {client.instagram && (
-                          <span className="text-pink-600 inline-flex items-center" title="Instagram Connected">
-                            <InstagramIcon className="!w-3.5 !h-3.5" />
+                          <span className="flex items-center gap-1 text-pink-700 break-all">
+                            <InstagramIcon className="!w-3 !h-3 flex-shrink-0" />
+                            <span>@{client.instagram.username}</span>
                           </span>
                         )}
-                      </h4>
-                      <span className="text-[10px] bg-slate-100 text-slate-600 border border-slate-200 px-1.5 py-0.5 rounded font-mono uppercase">
-                        {client.connectMode}
-                      </span>
+                        {client.gbp && (
+                          <span className="flex items-center gap-1 text-emerald-700 break-all">
+                            <GoogleBusinessIcon className="!w-3 !h-3 flex-shrink-0" />
+                            <span>{client.gbp.locationName || "Google Business Profile"}</span>
+                          </span>
+                        )}
+                      </div>
                     </div>
-                    <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-[11px] text-slate-500 mt-1">
-                      {client.facebook && (
-                        <span className="flex items-center gap-1 text-blue-700">
-                          <FacebookIcon /> {client.facebook.pageName} (ID: {client.facebook.pageId || "N/A"})
-                        </span>
-                      )}
-                      {client.facebook && client.instagram && <span>•</span>}
-                      {client.instagram && (
-                        <span className="flex items-center gap-1 text-pink-700">
-                          <InstagramIcon /> @{client.instagram.username}
-                        </span>
-                      )}
-                    </div>
-                  </div>
 
-                  <div className="flex items-center gap-2 self-end sm:self-center">
-                    <button
-                      onClick={() => {
-                        setShowManageModal(false);
-                        openEditClient(client);
-                      }}
-                      className="p-1.5 text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded-md transition cursor-pointer"
-                      title="Edit Client"
-                    >
-                      <Edit2 className="h-4 w-4" />
-                    </button>
-                    <button
-                      onClick={() => handleDeleteClient(client.id)}
-                      className="p-1.5 text-slate-600 hover:text-red-600 hover:bg-red-50 rounded-md transition cursor-pointer"
-                      title="Delete Client"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
+                    {/* Action buttons (Edit & Delete) */}
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      <button
+                        onClick={() => {
+                          setShowManageModal(false);
+                          openEditClient(client);
+                        }}
+                        className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg border border-slate-200 transition cursor-pointer"
+                        title="Edit Client"
+                      >
+                        <Edit2 className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteClient(client.id)}
+                        className="p-1.5 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg border border-slate-200 transition cursor-pointer"
+                        title="Delete Client"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}
