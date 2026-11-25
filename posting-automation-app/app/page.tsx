@@ -488,8 +488,16 @@ export default function SocialComposer() {
   }, []);
 
   useEffect(() => {
-    // 1. First, instantly load from localStorage (instant display on Vercel/mobile)
+    // 1. First, instantly load clients and scheduled posts history from localStorage (so Vercel/mobile page refresh never loses scheduled queue)
     try {
+      const cachedHistory = localStorage.getItem("social_history_cache");
+      if (cachedHistory) {
+        const parsedHist = JSON.parse(cachedHistory);
+        if (Array.isArray(parsedHist) && parsedHist.length > 0) {
+          setPostHistory(parsedHist);
+        }
+      }
+
       const cached = localStorage.getItem("social_clients_cache");
       if (cached) {
         const parsed = JSON.parse(cached);
@@ -534,12 +542,24 @@ export default function SocialComposer() {
 
     loadClients();
 
-    // 2. Fetch history from SQLite DB
+    // 2. Fetch history from SQLite DB & sync with localStorage
     fetch("/api/history", { cache: "no-store" })
       .then((r) => r.json())
       .then((d) => {
-        if (d.success && d.history) {
-          setPostHistory(d.history);
+        if (d.success && Array.isArray(d.history)) {
+          setPostHistory((prev) => {
+            // Merge DB items with existing local scheduled queue items so scheduled posts are never wiped
+            const merged = [...prev];
+            for (const item of d.history) {
+              if (!merged.some((m) => m.id === item.id)) {
+                merged.push(item);
+              }
+            }
+            try {
+              localStorage.setItem("social_history_cache", JSON.stringify(merged));
+            } catch {}
+            return merged;
+          });
         }
       })
       .catch((err) => console.error("Error loading history from DB:", err));
@@ -1137,7 +1157,13 @@ export default function SocialComposer() {
           body: JSON.stringify({ ...newHistoryItem, clientId: activeProject.id }),
         }).catch(() => {});
 
-        setPostHistory((prev) => [newHistoryItem, ...prev]);
+        setPostHistory((prev) => {
+          const updated = [newHistoryItem, ...prev];
+          try {
+            localStorage.setItem("social_history_cache", JSON.stringify(updated));
+          } catch {}
+          return updated;
+        });
 
         setPublishSuccess(
           isScheduled
@@ -1223,7 +1249,13 @@ export default function SocialComposer() {
           body: JSON.stringify({ ...newHistoryItem, clientId: activeProject.id }),
         }).catch((err) => console.error("Error saving post to DB:", err));
 
-        setPostHistory((prev) => [newHistoryItem, ...prev]);
+        setPostHistory((prev) => {
+          const updated = [newHistoryItem, ...prev];
+          try {
+            localStorage.setItem("social_history_cache", JSON.stringify(updated));
+          } catch {}
+          return updated;
+        });
 
         setPublishSuccess(
           isScheduled
