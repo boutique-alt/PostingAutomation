@@ -2461,7 +2461,16 @@ export default function SocialComposer() {
                       : "bg-slate-100 text-slate-600 hover:bg-slate-200"
                   }`}
                 >
-                  All Posts ({livePosts.length > 0 ? livePosts.length : clientPostHistory.length})
+                  All Posts ({(() => {
+                    const scheduledFromClient = clientPostHistory.filter((p) => p.status === "scheduled");
+                    const combined = [...scheduledFromClient];
+                    for (const p of livePosts) {
+                      if (!combined.some((c) => c.id === p.id || (c.caption && c.caption === p.caption))) {
+                        combined.push(p);
+                      }
+                    }
+                    return combined.length;
+                  })()})
                 </button>
 
                 <button
@@ -2473,7 +2482,17 @@ export default function SocialComposer() {
                   }`}
                 >
                   <Clock className="h-3.5 w-3.5" />
-                  Scheduled Queue ({livePosts.filter((p) => p.status === "scheduled").length || scheduledCount})
+                  Scheduled Queue ({(() => {
+                    const scheduledFromLive = livePosts.filter((p) => p.status === "scheduled");
+                    const scheduledFromClient = clientPostHistory.filter((p) => p.status === "scheduled");
+                    const combined = [...scheduledFromClient];
+                    for (const p of scheduledFromLive) {
+                      if (!combined.some((c) => c.id === p.id || (c.caption && c.caption === p.caption))) {
+                        combined.push(p);
+                      }
+                    }
+                    return combined.length;
+                  })()})
                 </button>
 
                 <button
@@ -2522,7 +2541,14 @@ export default function SocialComposer() {
                 </div>
               ) : (
                 (() => {
-                  const displayList = livePosts.length > 0 ? livePosts : clientPostHistory;
+                  // Merge clientPostHistory (including newly scheduled reels) with livePosts seamlessly
+                  const scheduledFromClient = clientPostHistory.filter((p) => p.status === "scheduled");
+                  const displayList = [...scheduledFromClient];
+                  for (const p of livePosts) {
+                    if (!displayList.some((c) => c.id === p.id || (c.caption && c.caption === p.caption))) {
+                      displayList.push(p);
+                    }
+                  }
                   const finalFiltered = displayList.filter((item) => {
                     // Strictly match active client
                     if (activeProject) {
@@ -2546,7 +2572,7 @@ export default function SocialComposer() {
 
                   return (
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 pb-2">
-                      {finalFiltered.map((item) => {
+                      {finalFiltered.map((item: any) => {
                         const imgUrl = item.mediaUrl || item.mediaPath || null;
                         const isVideo = item.isVideo || item.postType === "reel";
                         const isInsta = item.platform === "instagram" || item.platforms?.includes("instagram");
